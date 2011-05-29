@@ -1,3 +1,6 @@
+2011-5-29 0.1c
+1. 增加 response.flush 和 response.clear 方法，详见文档
+
 2011-5-28 0.1c
 1. 增加缓存功能，图片、html、css 等静态内容自动缓存
 

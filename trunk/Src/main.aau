@@ -3,10 +3,10 @@
 import webquicker.server;
 import win.ui;
 /*DSG{{*/
-var winform = win.form(parent=...; bottom=195;max=false;right=349;text="Web Quicker - 快手B/S应用开发框架" )
+var winform = win.form(parent=...; bottom=195;max=false;text="Web Quicker - 快手B/S应用开发框架";right=349 )
 winform.add( 
-static={ bottom=117;text="Web服务器已开启，关闭该窗体停止服务。
-访问 http://127.0.0.1:5050/ 以查看结果。";left=48;top=76;font=LOGFONT( name="宋体";h=-12 );transparent=1;z=1;right=302;cls="static" }
+static={ bottom=117;right=302;left=48;top=76;font=LOGFONT( name="宋体";h=-12 );transparent=1;z=1;text="Web服务器已开启，关闭该窗体停止服务。
+访问 http://127.0.0.1:5050/ 以查看结果。";cls="static" }
 )
 /*}}*/
 
@@ -30,7 +30,7 @@ function accept(hSocket) {
 	data = string.left(data, len);
 	
 	var info = webquicker.parser.parseRequest(data);
-	response = webquicker.parser.response();
+	response = webquicker.parser.response(hSocket);
 	request = info;
 	
 	// 错误处理
@@ -83,12 +83,6 @@ function accept(hSocket) {
 			err_404();
 		} else {
 			var tpath = io.splitpath(info.url);
-			
-			//if (request.header[["Connection"]] == "keep-alive") {
-				//response.header[["Connection"]] = "keep-alive";
-				//ret = true;
-			//}
-			
 			if (string.lower(tpath.ext) == ".aau") {
 				// 脚本文件，执行
 				try {
@@ -160,8 +154,7 @@ function accept(hSocket) {
 		
 	// 如果非大文件，则采用一次性发送的形式
 	if (!flag) {
-		var responseText = response.makeResponse();
-		wsock.send(hSocket, responseText, #responseText, 0);
+		response.flush();
 	}
 	
 	return ret;
