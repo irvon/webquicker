@@ -70,7 +70,9 @@ parseRequest = function (str) {
 // Éú³É»Ø¸´
 response = class {
 
-	ctor () {
+	ctor (socket) {
+		var hSocket = socket;
+		
 		this.status = "200 OK";
 		this.header = {};
 		this.header["Content-Type"] = "text/html";
@@ -88,6 +90,20 @@ response = class {
 	
 	write = function (str) {
 		this.body = this.body ++ tostring(str);
+	}
+	
+	flush = function () {
+		if (this.header) {
+			var responseHeader = this.makeResponseHeader();
+			..wsock.send(hSocket, responseHeader, #responseHeader, 0);
+			this.header = null;
+		}
+		..wsock.send(hSocket, this.body, #this.body, 0);
+		this.body = "";
+	}
+	
+	clear = function () {
+		this.body = "";
 	}
 	
 	redirect = function (url) {
@@ -131,12 +147,17 @@ response = class {
 			}
 		}
 		
-		str = str + "Content-Length: " + contentLength + '\r\n\r\n';
+		if (contentLength) {
+			str = str + "Content-Length: " + contentLength + '\r\n';
+		}
+		
+		str = str + '\r\n';
+		
 		return str;
 	}
 	
 	makeResponse = function () {
-		var str = this.makeResponseHeader(#this.body);
+		var str = this.makeResponseHeader();
 		str = str ++ this.body;
 		return str;
 	}
