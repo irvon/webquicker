@@ -1,5 +1,6 @@
 2011-5-29 0.1c
 1. 增加 response.flush 和 response.clear 方法，详见文档
+2. 当缓冲区内的内容多到一定程度的时候，自动调用 response.flush 方法输出缓存
 
 2011-5-28 0.1c
 1. 增加缓存功能，图片、html、css 等静态内容自动缓存
