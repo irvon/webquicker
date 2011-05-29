@@ -1,0 +1,107 @@
+namespace webquicker;
+
+import wsock;
+import wsock.err;
+
+server = class {
+
+	ctor () {
+		this.maxThreadCount = 20; // 限制最大线程数为 20
+		..thread.set("threadCount", 0);
+	}
+	
+	start = function (port, func) {
+		port = type(port) == type.number ? port : 80;
+		
+		this.stop();
+		
+		// 初始化 Winsock
+		if (!..wsock.open()) {
+			error(..wsock.err.lasterr(), 2);
+		}
+		
+		// 创建套接字
+		this.hSocket = ..wsock.socket(0x2/*_AF_INET*/, 0x1/*_SOCK_STREAM*/, 0x6/*_IPPROTO_TCP*/);
+		if (this.hSocket == _INVALID_SOCKET) {
+			..wsock.close();
+			error("创建套接字失败!", 2);
+		}
+		
+		// 绑定
+		var service = ..wsock.sockaddr_in();
+		service.sin_family = 0x2/*_AF_INET*/;
+		service.sin_addr.S_un.S_addr = ..wsock.inet_addr("0.0.0.0");
+		service.sin_port = ..wsock.htons(port);
+		if (..wsock.bind(this.hSocket, service, ..raw.sizeof(service)) == -1/*_SOCKET_ERROR*/) {
+			..wsock.closesocket(hSocket);
+			..wsock.close();
+			error("绑定端口失败,请检查端口是否被占用!", 2);
+		}
+		
+		// 监听
+		if (..wsock.listen(this.hSocket, 10) == -1/*_SOCKET_ERROR*/) {
+			..wsock.closesocket(this.hSocket);
+			..wsock.close();
+			error("监听失败,请检查端口是否被占用!", 2);
+		}
+		
+		// 创建响应线程
+		this.hThread = ..thread.create(function (hSocket, func, maxThreadCount) {
+			import wsock;
+			// ..wsock.ioctlsocket(hSocket, 0x8004667e, 1);
+			..thread.set("thread_stop", false);
+			while (true) {
+				if (..thread.get("thread_stop")) {
+					break;
+				}
+				var hAcceptSocket = ..wsock.accept(hSocket, 0, 0);
+				if (hAcceptSocket != _INVALID_SOCKET) {
+					while (..thread.get("threadCount") >= maxThreadCount) {
+						// 如果当前线程数超过最大线程数，则等待
+						sleep(10);
+					}
+					
+					var hThread = ..thread.create(function (hSocket, func) {
+						import wsock;
+						..thread.set("threadCount", ..thread.get("threadCount") + 1); // 递加线程数
+						while (func(hSocket)) {
+						
+						}
+						func = null;
+						..wsock.closesocket(hSocket);
+						hSocket = null;
+						collectgarbage("collect");
+						..thread.set("threadCount", ..thread.get("threadCount") - 1); // 递减线程数
+					}, hAcceptSocket, func);
+					
+					..raw.closehandle(hThread);
+				}
+			}
+		}, this.hSocket, func, this.maxThreadCount);
+	}
+	
+	stop = function () {
+		if (this.hThread) {
+			..io.print("Stopping the service...");
+			..thread.set("thread_stop", true);
+			..thread.wait(this.hThread, 1000);
+			var t = ..time.tick();
+			while (..thread.get("threadCount") > 0 && (..time.tick() - t) < 3000) {
+				sleep(100);
+			}
+			..thread.terminate(this.hThread, 0);
+			..raw.closehandle(this.hThread);
+			..wsock.closesocket(this.hSocket);
+			..wsock.close();
+			..io.print("Stopped.");
+			this.hThread = null;
+		}
+	}
+	
+	_gcdata = ..gcdata(
+		_gc = function (){ 
+			this.stop();
+		} 
+	);
+	
+}

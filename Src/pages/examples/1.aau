@@ -1,0 +1,102 @@
+import win;
+import winex;
+import win.graphics;
+import gdip;
+
+var printWindowToStream = function (hwnd) {
+	
+	// 取得窗口大小
+	var x, y, cx, cy = win.getPos(hwnd);
+	
+	var cvs = win.graphics.canvas();
+	cvs.fromHDC(::GetDC(0));
+	var cvsMem = win.graphics.canvas();
+	cvsMem.create();
+	var imgMem = win.graphics.image(cvs, cx, cy);
+	cvsMem.image = imgMem;
+	cvsMem.printWindow(hwnd);
+	
+	// 取出图片数据
+	var img = gdip.bitmap(imgMem.handle, 0);
+	var hMem = ::GlobalAlloc(0x2/*_GMEM_MOVEABLE*/, 0);
+	var ret, pIStream = ::CreateStreamOnHGlobal(hMem, 1);
+	gdip.SaveImageToStream(img, pIStream, win.guid.fromString(gdip.encoder.image.PNG));
+	var pMem = ::GlobalLock(hMem);
+	var GlobalSize = ::Kernel32.api("GlobalSize", "int(pointer)");
+	var size = GlobalSize(pMem);
+	var CopyMemoryStr = ::Kernel32.api("RtlMoveMemory", "int(string&,pointer,int)");
+	var ret, data = CopyMemoryStr(size, pMem, size);
+	::GlobalUnlock(hMem);
+	
+	imgMem.destroy();
+	cvsMem.destroy();
+	cvs.destroy();
+	
+	return data;
+}
+
+var action = request.get[["action"]];
+if (action == "do") {
+	var hwnd = request.get[["hwnd"]];
+	if (hwnd) {
+		hwnd = tonumber(hwnd);
+		if (win.isWindow(hwnd)) {
+			var data = printWindowToStream(hwnd);
+			response.header["Content-Type"] = "image/png";
+			response.write(data);
+		}
+	}
+} else {
+	var str = 
+/*
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="gbk" />
+	<title>后台截图测试</title>
+	<link rel="stylesheet" href="../style/common.css" type="text/css" />
+</head>
+<script type="text/javascript">
+function printWindow() {
+	with (document.getElementById("image")) {
+		style.width = "auto";
+		src = "1.aau?action=do&hwnd=" + document.getElementById("w").value + "&_r=" + Math.random();
+		style.display = "";
+	}
+}
+</script>
+<body>
+<div id="wrapper">
+	<h2>后台截图测试</h2>
+	<em>注：只能截取前台或后台的窗体（不包括被最小化或隐藏的窗体）</em>
+	<p>请选择要截图的窗口：
+		<select id="w">
+*/
+	response.write(str);
+	// 枚举顶层窗口
+	winex.enumTop(
+		function(hwnd){
+ 			if (win.isVisible(hwnd)) {
+ 				var title = win.getText(hwnd);
+ 				if (title != "") {
+ 					title = string.replace(title, "\<", "&lt;");
+ 					title = string.replace(title, "\>", "&gt;");
+					response.write(
+						'\t\t<option value="' + hwnd + '">' + title + '</option>\r\n'
+					);
+				}
+			}
+		}
+	);
+	str = 
+/*
+		</select>
+		<input type="button" value="截图" onclick="printWindow();" />
+	</p>
+	<p><img id="image" style="display:none;" onload="this.style.width=this.offsetWidth>980?'980px':'auto';" /></p>
+</div>
+</body>
+</html>
+*/
+	response.write(str);
+}
