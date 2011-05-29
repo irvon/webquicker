@@ -90,6 +90,9 @@ response = class {
 	
 	write = function (str) {
 		this.body = this.body ++ tostring(str);
+		if (#this.body > 65000) {
+			this.flush();
+		}
 	}
 	
 	flush = function () {
