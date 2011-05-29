@@ -1,0 +1,22 @@
+loadcode("examples/blog/inc/page.class.aau")(); // 页面管理
+loadcode("examples/blog/inc/entry.function.aau")(); // 文章管理
+
+var entry_id = tonumber(request.get[["id"]] or "");
+var entry = get_entry(entry_id);
+if (!entry) {
+	response.write("No such a entry!");
+	return;
+}
+var ret, catalog = is_catalog_exist(tonumber(entry["entry_catalog"]));
+if (!ret) {
+	response.write("The catalog is not exist.");
+}
+
+// 头部
+write_header(string.fromto(entry["entry_title"] + " - " + catalog["name"]) + " - AAUBlog", tonumber(entry["entry_catalog"]));
+
+// 主体
+write_entry(entry_id);
+
+// 脚部
+write_footer();

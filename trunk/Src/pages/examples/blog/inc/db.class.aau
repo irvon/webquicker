@@ -1,0 +1,23 @@
+/* 数据库操作类 */
+
+// 数据库配置
+_DATABASE_PATH = "../database/blog.db";
+
+import sqlite;
+
+class_db = class {
+	connect = function () {
+		this.conn = ..sqlite(_DATABASE_PATH);
+	}
+	
+	close = function () {
+		if (this.conn) {
+			this.conn.close();
+			this.conn = null;
+		}
+	}
+	
+	 ..gcdata(
+		_gc = this.close;
+	)
+}

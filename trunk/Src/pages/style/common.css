@@ -1,0 +1,29 @@
+html, body {
+	margin: 0;
+	padding: 0;
+}
+html, body, div, h2, em, a, input, ol, li {
+	font: 12px/1.3 Verdana, Tahoma;
+	font-weight: normal;
+	text-decoration: none;
+	outline: none;
+	color: #000;
+	display: visible;
+	zoom: 1;
+}
+#wrapper {
+	margin: 20px auto 0;
+	width: 980px;
+}
+h2 {
+	padding-top: 10px;
+	font-size: 14px;
+	font-weight: bold;
+}
+ol {
+	list-style-position: inside;
+}
+a {
+	color: #009;
+	text-decoration: underline;
+}

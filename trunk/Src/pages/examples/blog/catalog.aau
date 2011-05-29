@@ -1,0 +1,18 @@
+loadcode("examples/blog/inc/page.class.aau")(); // 页面管理
+loadcode("examples/blog/inc/entry.function.aau")(); // 文章管理
+
+var catalog_id = tonumber(request.get[["id"]] or "");
+var ret, catalog = is_catalog_exist(catalog_id);
+if (!ret) {
+	response.write("The catalog is not exist.");
+	return;
+}
+
+// 头部
+write_header(string.fromto(catalog.name) + " - AAUBlog", catalog_id);
+
+// 主体
+write_entries(catalog_id);
+
+// 脚部
+write_footer();

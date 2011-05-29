@@ -1,0 +1,4 @@
+response.cookie["username"] = request.post["username"] or "";
+// ÖØ¶¨Ïò
+response.status = "301 Moved Permanently";
+response.header["Location"] = "index.aau";

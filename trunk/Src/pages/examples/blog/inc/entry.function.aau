@@ -1,0 +1,74 @@
+/* 文章管理 */
+
+loadcode("examples/blog/inc/db.class.aau")();
+
+format_entry = function (temp, entry) {
+	var entry_t = table.copy(entry);
+	entry_t["entry_date"] = time(tonumber(entry_t["entry_date"]));
+	entry_t["entry_date"].format = "%Y-%m-%d %H:%M:%S";
+	var re, info = is_catalog_exist(tonumber(entry_t["entry_catalog"]));
+	entry_t["entry_catalog_name"] = info.name;
+	temp = string.replace(temp, "{entry_id}", entry_t["entry_id"]);
+	temp = string.replace(temp, "{entry_catalog_id}", entry_t["entry_catalog"]);
+	temp = string.replace(temp, "{entry_catalog_name}", entry_t["entry_catalog_name"]);
+	temp = string.replace(temp, "{entry_author_id}", entry_t["entry_author"]);
+	temp = string.replace(temp, "{entry_author_name}", get_admin_name_by_id(tonumber(entry_t["entry_author"])));
+	temp = string.replace(temp, "{entry_date}", tostring(entry_t["entry_date"]));
+	temp = string.replace(temp, "{entry_date_year}", tostring(entry_t["entry_date"].year));
+	temp = string.replace(temp, "{entry_date_month}", tostring(entry_t["entry_date"].month));
+	temp = string.replace(temp, "{entry_date_day}", tostring(entry_t["entry_date"].day));
+	temp = string.replace(temp, "{entry_date_hour}", tostring(entry_t["entry_date"].hour));
+	temp = string.replace(temp, "{entry_date_minute}", tostring(entry_t["entry_date"].minute));
+	temp = string.replace(temp, "{entry_date_second}", tostring(entry_t["entry_date"].second));
+	temp = string.replace(temp, "{entry_title}", entry_t["entry_title"]);
+	temp = string.replace(temp, "{entry_summary}", entry_t["entry_summary"]);
+	temp = string.replace(temp, "{entry_content}", entry_t["entry_content"]);
+	return temp;
+}
+
+write_entries = function (catalog_id) {
+	var str = load_template("entry_list");
+	var entry_template = load_template("entry"); // 每篇文章的模板
+	var entries = get_entries(catalog_id);
+	var entry_list = "";
+	for (i = 1; #entries) {
+		var entry = entries[i];
+		var temp = format_entry(entry_template, entry);
+		entry_list = entry_list + temp;
+	}
+	str = string.replace(str, "{entries}", entry_list);
+	response.write(str);
+}
+
+write_entry = function (entry_id) {
+	var entry_template = load_template("entry_content");
+	response.write(format_entry(entry_template, get_entry(entry_id)));
+}
+
+get_entries = function (catalog_id) {
+	var db = class_db();
+	db.connect();
+	var sql = "SELECT entry_id,entry_catalog,entry_author,entry_date,entry_title,entry_summary,entry_content FROM entry ";
+	if (catalog_id) {
+		catalog_id = tonumber(catalog_id);
+		sql = sql + "WHERE entry_catalog=" + catalog_id + " ";
+	}
+	sql = sql + " ORDER BY entry_id DESC LIMIT 100";
+	var entries = db.conn.getTable(sql);
+	db.close();
+	return entries;
+}
+
+get_entry = function (entry_id) {
+	if (!entry_id) {
+		return;
+	}
+	entry_id = tostring(entry_id);
+	var db = class_db();
+	db.connect();
+	var entries = db.conn.getTable(
+		"SELECT entry_id,entry_catalog,entry_author,entry_date,entry_title,entry_summary,entry_content FROM entry " + 
+		"WHERE entry_id=" + entry_id);
+	db.close();
+	return #entries ? entries[1] : null;
+}

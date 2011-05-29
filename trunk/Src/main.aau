@@ -1,0 +1,175 @@
+// 当前该框架尚处于测试阶段，请勿在实际工程中使用
+
+import webquicker.server;
+import win.ui;
+/*DSG{{*/
+var winform = win.form(parent=...; bottom=195;max=false;right=349;text="Web Quicker - 快手B/S应用开发框架" )
+winform.add( 
+static={ bottom=117;text="Web服务器已开启，关闭该窗体停止服务。
+访问 http://127.0.0.1:5050/ 以查看结果。";left=48;top=76;font=LOGFONT( name="宋体";h=-12 );transparent=1;z=1;right=302;cls="static" }
+)
+/*}}*/
+
+io.open();
+io.print("The web service is running... ");
+
+// 初始化
+function init() {
+	webserver = webquicker.server();
+	webserver.start(5050, accept);
+}
+
+// 处理函数（在子线程中）
+function accept(hSocket) {
+	import fsys.file;
+	import webquicker.parser;
+	
+	var ret = false;
+	
+	var len, data = wsock.recv(hSocket, 2048, 2048, 0);
+	data = string.left(data, len);
+	
+	var info = webquicker.parser.parseRequest(data);
+	response = webquicker.parser.response();
+	request = info;
+	
+	// 错误处理
+	err_404 = function () {
+		response.status = "404 File Not Found";
+		response.body = "<html><head><title>File Not Found</title></head><body><h1>404 File Not Found</h1>";
+		response.body += "</body></html>";
+	}
+	
+	err_500 = function (msg) {
+		response.status = "500 Internal Server Error";
+		response.body = "<html><head><title>Script Error</title></head><body><h1>Script Error</h1>";
+		response.body += "<hr/><p><strong>Message: </strong>" + msg + "</p></body></html>";
+	}
+	
+	// 执行 aau
+	loadPage = function (path) {
+		if (!io.exist("/pages" + path + ".aau")) {
+			err_404();
+		} else {
+			var SetCurrentDirectory = ::Kernel32.api("SetCurrentDirectory", "int(string)");
+			SetCurrentDirectory(io.fullpath("/pages/"));
+			var func, err = loadcode("/pages/" + path + ".aau");
+			if (func) {
+				func(info, response);
+			} else {
+				err_500(err or "Unknown");
+			}
+		}
+	}
+	
+	var flag = false;
+	
+	if (info.requireRedirect) {
+		response.redirect(info.url);
+	} else {
+		// 自动寻找首页	
+		if (string.endWith(info.url, "/")) {
+			// 严格按照顺序
+			for (i = 1; #webquicker.parser.indexes) {
+				if (io.exist(io.fullpath("/pages" + info.url + webquicker.parser.indexes[i]))) {
+					info.url += webquicker.parser.indexes[i];
+					break;
+				}
+			}
+		}
+		
+		// 防止 ../ 读取到 Web 根目录以外的文件
+		if (!string.startWith(io.fullpath("/pages" + info.url), io.fullpath("/pages/"))) {
+			err_404();
+		} else {
+			var tpath = io.splitpath(info.url);
+			
+			//if (request.header[["Connection"]] == "keep-alive") {
+				//response.header[["Connection"]] = "keep-alive";
+				//ret = true;
+			//}
+			
+			if (string.lower(tpath.ext) == ".aau") {
+				// 脚本文件，执行
+				try {
+					loadPage(tpath.dir + tpath.name);
+				} catch (e) {
+					err_500(e or "Unknown");
+				}
+			} else {
+				// MIME
+				response.header["Content-Type"] = "application/stream";
+				for (k, v in webquicker.parser.mime) {
+					if (tpath.ext == "." + k) {
+						response.header["Content-Type"] = v;
+					}
+				}
+				
+				// 打开文件
+				var file = fsys.file("/pages/" + info.url);
+				if (file) {
+					// 最后修改日期
+					var fileTime = file.getFileTimes();
+					var t = fileTime.write;
+					t.format = "%a, %d %b %Y %H:%M:%S GMT"; // 格式化为 GMT 时间
+					
+					var tSince;
+					if (request.header[["If-Modified-Since"]]) {
+						try {
+							tSince = time(request.header[["If-Modified-Since"]], "%a, %d %b %Y %H:%M:%S GMT");
+							tSince.addhour(8); // GMT +8:00
+						} catch (e) {
+						
+						}
+					}
+					
+					if (tSince && tSince >= t) {
+						response.status = "304 Not Modified";
+						response.body = "";
+					} else {
+						t.addhour(-8); // GMT +0:00
+						response.header["Last-Modified"] = tostring(t);
+						
+						// 发送回复头
+						var bytesTotal = file.size;
+						var responseHeader = response.makeResponseHeader(bytesTotal);
+						wsock.send(hSocket, responseHeader, #responseHeader, 0);
+						file.seek("set");
+						// 发送文件
+						var bytesSent = 0;
+						while (bytesSent < bytesTotal) {
+							var bytesRead = math.min(bytesTotal - bytesSent, 102400);
+							var str = file.read(bytesRead);
+							wsock.send(hSocket, str, #str, 0);
+							bytesSent += bytesRead;
+						}
+						file.close();
+						
+						flag = true;
+					}
+				} else {
+					if (!string.endWith(info.url, "/") && io.exist("/pages/" + info.url + "/")) {
+						response.redirect(info.url + "/");
+					} else {
+						err_404();
+					}
+				}
+			}
+		}
+	}
+		
+	// 如果非大文件，则采用一次性发送的形式
+	if (!flag) {
+		var responseText = response.makeResponse();
+		wsock.send(hSocket, responseText, #responseText, 0);
+	}
+	
+	return ret;
+}
+
+init();
+
+winform.show();
+win.loopMessage();
+
+// io.close();

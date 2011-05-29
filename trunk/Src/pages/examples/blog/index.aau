@@ -1,0 +1,11 @@
+loadcode("examples/blog/inc/page.class.aau")(); // 页面管理
+loadcode("examples/blog/inc/entry.function.aau")(); // 文章管理
+
+// 头部
+write_header("AAUBlog - 一个用快手写的博客系统");
+
+// 主体
+write_entries();
+
+// 脚部
+write_footer();

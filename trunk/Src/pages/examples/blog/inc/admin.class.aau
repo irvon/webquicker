@@ -1,0 +1,102 @@
+/* 管理员操作类 */
+
+loadcode("examples/blog/inc/db.class.aau")();
+
+class_admin = class {
+	ctor () {
+		var class_db = ..class_db;
+		var request = ..request;
+		var response = ..response;
+		var string = ..string;
+		var time = ..time;
+		
+		var db = class_db();
+		db.connect();
+	}
+	
+	 ..gcdata(
+		_gc = function(){
+			db.close();
+		}
+	);
+	
+	// 验证管理员是否已登录
+	is_admin_login = function () {
+		var aid = request.cookie[["aid"]]
+		var authcode = request.cookie[["authcode"]];
+		if (!aid || !authcode || #authcode != 32) {
+			return false;
+		}
+		aid = tonumber(aid);
+		var data = db.conn.getTable("SELECT aid,username,authcode FROM admin WHERE aid=" + aid);
+		if (#data < 1) {
+			return false;
+		}
+		if (data[1]["authcode"] != authcode) {
+			return false;
+		}
+		return true, { name = data[1]["username"]; };
+	}
+	
+	// 管理员登录
+	login = function (username, password) {
+		if (!username || type(username) != type.string) {
+			return false;
+		}
+		// 防注入处理
+		username = string.replace(username, "'", "");
+		if (!password || type(password) != type.string) {
+			return false;
+		}
+		password = string.replace(password, "'", "");
+		// password 应为 MD5 32位加密结果
+		if (#password != 32) {
+			return false;
+		}
+		
+		var data = db.conn.getTable(
+			string.format("SELECT aid,username,password FROM admin WHERE username='%s' AND password='%s'", username, password)
+		);
+		// 没有找到
+		if (#data < 1) {
+			return false;
+		}
+		var aid = data[1]["aid"];
+		if (aid) {
+			var authcode = string.random(32);
+			db.conn.exec("UPDATE admin SET authcode='" + authcode + "' WHERE aid=" + aid);
+			var expires = time.now();
+			expires.addday(30); // Cookie 储存 30 天
+			response.cookie["aid"] = {};
+			response.cookie["aid"].value = aid;
+			response.cookie["aid"].expires = expires;
+			response.cookie["authcode"] = {};
+			response.cookie["authcode"].value = authcode;
+			response.cookie["authcode"].expires = expires;
+			return true;
+		}
+		return false;
+	}
+	
+	// 登出
+	logout = function () {
+		response.cookie["aid"] = "";
+		response.cookie["authcode"] = "";
+	}
+}
+
+get_admin_name_by_id = function (id) {
+	if (!id) {
+		return;
+	}
+	id = tonumber(id);
+	var ret = null;
+	var db = class_db();
+	db.connect();
+	var data = db.conn.getTable("SELECT aid,username FROM admin WHERE aid=" + id);
+	if (#data) {
+		ret = data[1]["username"];
+	}
+	db.close();
+	return ret;
+}
