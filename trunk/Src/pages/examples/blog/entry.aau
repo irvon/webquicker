@@ -4,7 +4,7 @@ loadcode("examples/blog/inc/entry.function.aau")(); // ÎÄÕÂ¹ÜÀí
 var entry_id = tonumber(request.get[["id"]] or "");
 var entry = get_entry(entry_id);
 if (!entry) {
-	response.write("No such a entry!");
+	response.write("No such an entry!");
 	return;
 }
 var ret, catalog = is_catalog_exist(tonumber(entry["entry_catalog"]));

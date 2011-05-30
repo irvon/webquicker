@@ -1,0 +1,11 @@
+loadcode("examples/blog/inc/page.class.aau")(); // 页面管理
+loadcode("examples/blog/inc/entry.function.aau")(); // 文章管理
+
+// 头部
+write_header("发表文章 - AAUBlog");
+
+// 主体
+response.write(load_template("entry_add"));
+
+// 脚部
+write_footer();
