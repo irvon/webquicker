@@ -1,5 +1,7 @@
-// 栏目操作
+/* 栏目操作 */
+
 loadcode("examples/blog/inc/db.class.aau")();
+loadcode("examples/blog/inc/catalog.function.aau")();
 
 // 获取栏目列表（替换 {nav_list}）
 get_nav_list = function (selected = "index") {
@@ -11,7 +13,7 @@ get_nav_list = function (selected = "index") {
 	// 连接数据库，读取分类列表
 	var db = class_db();
 	db.connect();
-	var catalogs = db.conn.getTable("SELECT catalog_id,catalog_name FROM catalog ORDER BY catalog_order");
+	var catalogs = get_catalog_list();
 	for (i = 1; #catalogs) {
 		nav_list += string.format(
 			'\t\t<li%s><a href="%s/catalog.aau?id=%d">%s</a></li>\r\n',
