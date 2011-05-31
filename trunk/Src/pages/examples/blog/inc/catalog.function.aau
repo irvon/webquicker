@@ -1,0 +1,11 @@
+/* ·ÖÀà²Ù×÷ */
+
+loadcode("examples/blog/inc/db.class.aau")();
+
+get_catalog_list = function (order) {
+	var db = class_db();
+	db.connect();
+	var data = db.conn.getTable("SELECT catalog_id,catalog_name FROM catalog ORDER BY " + (order or "catalog_order"));
+	db.close();
+	return data;
+}

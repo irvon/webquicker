@@ -1,11 +1,33 @@
 loadcode("examples/blog/inc/page.class.aau")(); // 页面管理
+loadcode("examples/blog/inc/admin.class.aau")(); // 管理员操作
 loadcode("examples/blog/inc/entry.function.aau")(); // 文章管理
+loadcode("examples/blog/inc/catalog.function.aau")(); // 分类管理
+
+// 检查是否登录
+var admin = class_admin();
+if (!admin.is_admin_login()) {
+	response.redirect("index.aau");
+	return;
+}
 
 // 头部
 write_header("发表文章 - AAUBlog");
 
 // 主体
-response.write(load_template("entry_add"));
+var str = load_template("entry_add");
+
+// 枚举所有分类
+catalog_list_str = "";
+var catalog_list = get_catalog_list();
+for (i = 1; #catalog_list) {
+	catalog_list_str = catalog_list_str + '\r\n\t\t\t\t\t<option value="' + catalog_list[i]["catalog_id"] + '">'
+		+ catalog_list[i]["catalog_name"] + '</option>';
+}
+str = string.replace(str, "@{catalog_list}", catalog_list_str);
+
+// 设置操作
+str = string.replace(str, "@{action}", "add");
+response.write(str);
 
 // 脚部
 write_footer();
