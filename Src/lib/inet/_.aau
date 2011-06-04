@@ -1,0 +1,249 @@
+namespace inet;
+ 
+::Wininet := ..raw.loadDll("Wininet.dll") 
+
+::InternetOpen = Wininet.api("InternetOpenA","pointer(string lpszAgent, int dwAccessType,string lpszProxy,string lpszProxyBypass,int dwFlags)" )
+::InternetConnect = Wininet.api("InternetConnect","pointer(POINTER hInternet,string lpszServerName,INT nServerPort,string lpszUserName,string lpszPassword,INT	 dwService,INT	 dwFlags,INT dwContext)")
+::InternetCloseHandle =Wininet.api("InternetCloseHandle","int(POINTER hInternet)")
+
+::InternetSetOption = Wininet.api("InternetSetOption","bool(pointer hInternet,INT dwOption,struct lpBuffer,INT dwBufferLength)")
+::InternetSetOptionPtr = Wininet.api("InternetSetOption","bool(pointer hInternet,INT dwOption,pointer lpBuffer,INT dwBufferLength)")
+ 
+::InternetGetCookie = Wininet.api("InternetGetCookie","int( string lpszUrl,pointer lpszCookieName,string &lpszCookieData,INT & lpdwSize)")
+::InternetSetCookie = Wininet.api("InternetSetCookie","int(string lpszUrl,pointer lpszCookieName,string lpszCookieData)")
+	
+//Get set proxy information on a InternetOpen() handle
+INTERNET_PROXY_INFO = class {  
+    INT dwAccessType; // 0x0/*_INTERNET_OPEN_TYPE_PRECONFIG*/ 
+    string lpszProxy;
+	string lpszProxyBypass;
+}   
+setProxy = function(proxyList,bypassList ="",hInet){
+	var inf = INTERNET_PROXY_INFO();
+	if( #proxyList )
+		inf.dwAccessType = 0x3/*_INTERNET_OPEN_TYPE_PROXY*/ ;
+	elseif( !proxyList ) 
+		inf.dwAccessType =  0x1/*_INTERNET_OPEN_TYPE_DIRECT*/
+		
+	inf.lpszProxy = proxyList
+	inf.lpszProxyBypass = bypassList
+	var ok = ::InternetSetOption(hInet,0x26/*_INTERNET_OPTION_PROXY*/,inf, 12/*..raw.sizeof(inf) */ );
+	::InternetSetOptionPtr(hInet,39/*_INTERNET_OPTION_SETTINGS_CHANGED*/, ,0);
+	return ok;
+}
+/**intellisense(inet)
+setProxy() = 不使用代理
+setProxy("") = 使用注册表默认代理设置
+setProxy("HTTP://主机地址:端口号") = 设置代理\n注意缓存的显IP页面可能显示旧的IP
+setProxy("HTTP://主机地址:端口号","localhost,127.0.0.1") = 设置代理\n第二个参数指定绕过代理的主机，支持通配符*
+end intellisense**/
+
+/*---------------------
+缓存函数 开始
+---------------------*/
+var INTERNET_CACHE_ENTRY_INFO = class {
+	INT cbSize = 80;
+	string url;
+	string fileName;
+	INT cacheEntryType;
+	INT useCount;
+	INT hitRate;
+	INT sizeLow;
+	INT sizeHigh;
+	struct lastModifiedTime =  ::FILETIME();
+	struct expireTime =  ::FILETIME();
+	struct lastAccessTime =  ::FILETIME();
+	struct lastSyncTime =  ::FILETIME(); 
+	string headerInfo;
+	INT headerInfoSize;
+	string fileExtension;
+	union reserved = {
+		INT reserved;
+		INT exemptDelta;
+	} ;
+	BYTE buffer[4016];/*_MAX_CACHE_ENTRY_INFO_SIZE - 80 */
+}  
+ 
+FindFirstUrlCacheEntry = Wininet.api("FindFirstUrlCacheEntry","pointer(pointer lpszUrlSearchPattern,struct &lpFirstCacheEntryInfo,INT& lpcbCacheEntryInfo)")
+FindNextUrlCacheEntry = Wininet.api("FindNextUrlCacheEntry","int(pointer hEnumHandle,struct &lpNextCacheEntryInfo,INT& lpcbCacheEntryInfo)")
+FindCloseUrlCache = Wininet.api("FindCloseUrlCache","bool(pointer hEnumHandle)")
+GetUrlCacheEntryInfo = Wininet.api("GetUrlCacheEntryInfo","int(str url,struct &acheEntryInfo,INT &size)")
+
+deleteCache = Wininet.api("DeleteUrlCacheEntry","int(string urlname)")
+getCacheInfo = function(url){ 
+	var entry = INTERNET_CACHE_ENTRY_INFO();   
+    GetUrlCacheEntryInfo(url,entry,4096/*_MAX_CACHE_ENTRY_INFO_SIZE*/); 
+	return entry;
+}
+eachCache = function(pattern,cacheType){
+	//缓冲区结构体
+	var entryInfo = INTERNET_CACHE_ENTRY_INFO();
+    var entrySize = 4096/*_MAX_CACHE_ENTRY_INFO_SIZE*/;
+    var hEntry = FindFirstUrlCacheEntry(cacheType, entryInfo, entrySize);   
+    var freeItor = function(){  
+   		if(hEntry){ 
+   			FindCloseUrlCache(hEntry);
+   			hEntry = null;
+   		}
+   	}   
+   	var gcEntry = ..gcdata( _gc = freeItor ;_topointer =  hEntry )
+   	var ok = hEntry;
+    
+    return function() { //接收for循环传递的参数得到迭代器控制变量
+    
+ 		while(ok){   
+			ok  = FindNextUrlCacheEntry(gcEntry, entryInfo,entrySize)  
+			if(ok && (!pattern || ..string.find(entryInfo.url,pattern) ) )
+				return entryInfo 
+		} 
+	} , freeItor ; 	
+ 
+}
+eachCookie = function(pattern){
+	return eachCache(pattern,"cookie:")
+}
+eachVisited = function(pattern){
+	return eachCache(pattern,"visited:")
+}
+clearCache = function(pattern ){
+	for( cache in eachCache(pattern) )
+		deleteCache( cache.url );  
+}
+clearCookie = function( pattern ){
+	clearSesseion();
+	for( cache in eachCache(pattern,"cookie:") )
+		deleteCache( cache.url );  
+}
+clearVisited = function( pattern  ){
+	for( cache in eachCache(pattern,"visited:") )
+		deleteCache( cache.url );  
+}
+clearSesseion = function(){
+	var ok = ::InternetSetOptionPtr( ,0x2A/*_INTERNET_OPTION_END_BROWSER_SESSION*/,,0); 
+	ok = ok && ::InternetSetOptionPtr( , 0x3C/*_INTERNET_OPTION_RESET_URLCACHE_SESSION*/, , 0)
+	return ok;	
+}
+
+
+/**intellisense(inet)
+deleteCache(__/*缓存URL*/) = 删除指定的缓存
+clearCookie(__/*可选输入查找模式串*/) = 清除指定Cookies
+clearVisited(__/*可选输入查找模式串*/) = 清除指定历史记录
+clearCache(__/*可选输入查找模式串*/) = 清除指定缓存
+clearSesseion() = 重置会话
+end intellisense**/
+
+/**intellisense()
+!inetcacheentry.url = URL地址名
+!inetcacheentry.fileName = 缓存的本地文件名
+!inetcacheentry.cacheEntryType = 缓存入口类型 
+!inetcacheentry.useCount = 当前用户使用缓存的次数 
+!inetcacheentry.sizeLow = 文件大小的低位
+!inetcacheentry.sizeHigh = 文件大小的高位
+!inetcacheentry.lastModifiedTime = 最后一次修改的时间
+!inetcacheentry.expireTime = 入口到期时间 
+!inetcacheentry.lastAccessTime = 最后一次访问的时间
+!inetcacheentry.lastSyncTime = 最后一次与服务器同步的时间
+!inetcacheentry.headerInfo = Internet缓存信息头的地址
+!inetcacheentry.headerInfoSize = Internet缓存信息头的信息大小 
+!inetcacheentry.fileExtension = 文件扩展(相当于将信息文件备份) 
+!inetcacheentry.reserved.exemptDelta = 豁免时间,跟最后访问时间有关
+end intellisense**/
+
+ /**intellisense()
+ _MAX_CACHE_ENTRY_INFO_SIZE=@4096/*_MAX_CACHE_ENTRY_INFO_SIZE*/
+_NORMAL_CACHE_ENTRY=@0x1/*_NORMAL_CACHE_ENTRY*/
+_STICKY_CACHE_ENTRY=@0x4/*_STICKY_CACHE_ENTRY*/
+_EDITED_CACHE_ENTRY=@0x8/*_EDITED_CACHE_ENTRY*/
+_TRACK_OFFLINE_CACHE_ENTRY=@0x10/*_TRACK_OFFLINE_CACHE_ENTRY*/
+_TRACK_ONLINE_CACHE_ENTRY=@0x20/*_TRACK_ONLINE_CACHE_ENTRY*/
+_SPARSE_CACHE_ENTRY=@0x10000/*_SPARSE_CACHE_ENTRY*/
+_COOKIE_CACHE_ENTRY=@0x100000/*_COOKIE_CACHE_ENTRY*/
+_URLHISTORY_CACHE_ENTRY=@0x200000/*_URLHISTORY_CACHE_ENTRY*/
+_URLCACHE_FIND_DEFAULT_FILTER=@0x300035/*_URLCACHE_FIND_DEFAULT_FILTER*/
+end intellisense**/
+
+
+/**intellisense()
+?inet.eachCookie = !inetcacheentry.
+?inet.eachVisited = !inetcacheentry.
+?inet.eachCache = !inetcacheentry.
+?inet.getCacheInfo = !inetcacheentry.
+inet.eachCache = @for cacheEntry in inet.eachCache(__/*可选输入查找模式串*/){
+	//遍历所有缓存
+	
+}
+inet.eachVisited = @for cacheEntry in inet.eachVisited(__/*可选输入查找模式串*/){
+	//遍历所有缓存历史
+	
+}
+inet.eachCookie = @for cacheEntry in inet.eachCookie(__/*可选输入查找模式串*/){
+	//遍历所有缓存Cookie
+	
+}
+end intellisense**/
+
+  
+/*---------------------
+缓存函数 结束
+---------------------*/
+  
+ /**intellisense()
+ _INTERNET_OPTION_SETTINGS_CHANGE=@39/*_INTERNET_OPTION_SETTINGS_CHANGED*/ 
+_INTERNET_OPTION_RESET_URLCACHE_SESSION=@0x3C/*_INTERNET_OPTION_RESET_URLCACHE_SESSION*/
+_HTTP_QUERY_FLAG_NUMBER=@0x20000000/*_HTTP_QUERY_FLAG_NUMBER*/
+_HTTP_QUERY_CONTENT_TYPE=@0x1/*_HTTP_QUERY_CONTENT_TYPE*/
+_HTTP_QUERY_CONTENT_LENGTH=@0x5/*_HTTP_QUERY_CONTENT_LENGTH*/
+_HTTP_QUERY_EXPIRES=@0xA/*_HTTP_QUERY_EXPIRES*/
+_HTTP_QUERY_LAST_MODIFIED=@0xB/*_HTTP_QUERY_LAST_MODIFIED*/
+_HTTP_QUERY_PRAGMA=@0x11/*_HTTP_QUERY_PRAGMA*/
+_HTTP_QUERY_VERSION=@0x12/*_HTTP_QUERY_VERSION*/
+_HTTP_QUERY_STATUS_CODE=@0x13/*_HTTP_QUERY_STATUS_CODE*/
+_HTTP_QUERY_STATUS_TEXT=@0x14/*_HTTP_QUERY_STATUS_TEXT*/
+_HTTP_QUERY_RAW_HEADERS=@0x15/*_HTTP_QUERY_RAW_HEADERS*/
+_HTTP_QUERY_RAW_HEADERS_CRLF=@0x16/*_HTTP_QUERY_RAW_HEADERS_CRLF*/
+_HTTP_QUERY_FORWARDED=@0x1E/*_HTTP_QUERY_FORWARDED*/
+_HTTP_QUERY_SET_COOKIE=@0x2B/*_HTTP_QUERY_SET_COOKIE*/
+_HTTP_QUERY_REQUEST_METHOD=@0x2D/*_HTTP_QUERY_REQUEST_METHOD*/
+_INTERNET_INVALID_PORT_NUMBER=@0x0/*_INTERNET_INVALID_PORT_NUMBER*/
+_INTERNET_SERVICE_HTTP=@0x3/*_INTERNET_SERVICE_HTTP*/
+_HTTP_QUERY_FLAG_SYSTEMTIME=@0x40000000/*_HTTP_QUERY_FLAG_SYSTEMTIME*/
+_PROXY_TYPE_PROXY=@0x2/*_PROXY_TYPE_PROXY*/
+_INTERNET_FLAG_KEEP_CONNECTION=@0x0/*_INTERNET_FLAG_KEEP_CONNECTION*/
+_INTERNET_OPEN_TYPE_PRECONFIG=@0x0/*_INTERNET_OPEN_TYPE_PRECONFIG*/
+_INTERNET_OPEN_TYPE_DIRECT=@0x1/*_INTERNET_OPEN_TYPE_DIRECT*/
+_INTERNET_OPEN_TYPE_PROXY=@0x3/*_INTERNET_OPEN_TYPE_PROXY*/
+_INTERNET_OPEN_TYPE_PRECONFIG_WITH_NO_AUTOPROXY=@0x4/*_INTERNET_OPEN_TYPE_PRECONFIG_WITH_NO_AUTOPROXY*/
+_INTERNET_DEFAULT_FTP_PORT=@0x15/*_INTERNET_DEFAULT_FTP_PORT*/
+_INTERNET_DEFAULT_GOPHER_PORT=@0x46/*_INTERNET_DEFAULT_GOPHER_PORT*/
+_INTERNET_DEFAULT_HTTP_PORT=@0x50/*_INTERNET_DEFAULT_HTTP_PORT*/
+_INTERNET_DEFAULT_HTTPS_PORT=@0x1BB/*_INTERNET_DEFAULT_HTTPS_PORT*/
+_INTERNET_DEFAULT_SOCKS_PORT=@0x438/*_INTERNET_DEFAULT_SOCKS_PORT*/
+_INTERNET_OPTION_PER_CONNECTION_OPTION=@0x4B/*_INTERNET_OPTION_PER_CONNECTION_OPTION*/
+_INTERNET_PER_CONN_FLAGS=@0x1/*_INTERNET_PER_CONN_FLAGS*/
+_INTERNET_OPTION_SETTINGS_CHANGED=@0x27/*_INTERNET_OPTION_SETTINGS_CHANGED*/
+_INTERNET_OPTION_REFRESH=@0x25/*_INTERNET_OPTION_REFRESH*/
+_INTERNET_PER_CONN_PROXY_SERVER=@0x2/*_INTERNET_PER_CONN_PROXY_SERVER*/
+_INTERNET_PER_CONN_PROXY_BYPASS=@0x3/*_INTERNET_PER_CONN_PROXY_BYPASS*/
+_INTERNET_FLAG_SECURE=@0x800000/*_INTERNET_FLAG_SECURE*/
+_INTERNET_FLAG_DONT_CACHE=@0x4000000/*_INTERNET_FLAG_DONT_CACHE*/
+_INTERNET_FLAG_KEEP_CONNECTIONN=@0x400000/*_INTERNET_FLAG_KEEP_CONNECTIONN*/
+_INTERNET_SERVICE_FTP=@0x1/*_INTERNET_SERVICE_FTP*/
+_INTERNET_SERVICE_GOPHER=@0x2/*_INTERNET_SERVICE_GOPHER*/
+_PROXY_TYPE_DIRECT=@0x1/*_PROXY_TYPE_DIRECT*/
+_INTERNET_FLAG_RELOAD=@0x80000000/*_INTERNET_FLAG_RELOAD*/
+_INTERNET_FLAG_CACHE_IF_NET_FAIL=@0x10000/*_INTERNET_FLAG_CACHE_IF_NET_FAIL*/
+_INTERNET_FLAG_HYPERLINK=@0x400/*_INTERNET_FLAG_HYPERLINK*/
+_HTTP_QUERY_ACCEPT=@0x18/*_HTTP_QUERY_ACCEPT*/
+_HTTP_QUERY_WARNING=@0x43/*_HTTP_QUERY_WARNING*/
+_INTERNET_OPTION_PROXY_USERNAME=@0x2B/*_INTERNET_OPTION_PROXY_USERNAME*/
+_INTERNET_OPTION_PROXY_PASSWORD=@0x2C/*_INTERNET_OPTION_PROXY_PASSWORD*/
+_HTTP_STATUS_PROXY_AUTH_REQ=@0x197/*_HTTP_STATUS_PROXY_AUTH_REQ*/
+_HTTP_STATUS_DENIED=@0x191/*_HTTP_STATUS_DENIED*/
+_INTERNET_OPTION_USERNAME=@0x1C/*_INTERNET_OPTION_USERNAME*/
+_INTERNET_OPTION_PASSWORD=@0x1D/*_INTERNET_OPTION_PASSWORD*/
+_INTERNET_OPTION_PROXY=@0x26/*_INTERNET_OPTION_PROXY*/
+_HTTP_QUERY_FLAG_REQUEST_HEADERS=@0x80000000/*_HTTP_QUERY_FLAG_REQUEST_HEADERS*/
+_INTERNET_SUPPRESS_RESET_ALL=@0x0/*_INTERNET_SUPPRESS_RESET_ALL*/
+_INTERNET_OPTION_END_BROWSER_SESSION=@0x2A/*_INTERNET_OPTION_END_BROWSER_SESSION*/
+end intellisense**/

@@ -1,0 +1,58 @@
+
+namespace util;
+
+class metaProperty{
+	ctor( meta )begin
+		if(type(meta)==type.table)
+			this = meta;//装饰继承模式
+	end;
+	
+	_get = function(k){
+		var t = this[ k]; 
+		if( type(t)==type.table  ){
+			if(type(t._get) == type.function ){ //Ducking Type 是宽松的隐性接口
+					var ok,v =call( t._get,owner  ); 
+					if(!ok)error(v,2) 
+					return v;
+			}  
+			return null;
+		}
+		
+		if(t)return t;
+		
+		if(this.get){ 
+			ok,ret = call( this.get,owner,k );
+			if(!ok)error(v,2) 
+			return  ret;
+		} 
+				
+	}
+	_set = function(k,v){
+		var t = this[ k];
+		if( type(t)==type.table  ){
+			if(type(t._set) == type.function ) { 
+				var ok,v = call( t._set,owner ,v)  
+				if(!ok)error(v,2) 
+				return;
+			} 
+			error("只读属性["+k+"]，禁止修改!" ,2)
+			//return; //如果没有_set函数，表示只读属性	
+		}
+		
+		if(this.set){ 
+			var ok,v = call( this.set,owner,k,v);
+			if(!ok)error(v,2) 
+			return;
+		}
+		owner[[k]] = v;
+	}
+
+}
+ 
+  
+
+/**intellisense(util)
+metaProperty = 属性元表
+metaProperty(__) = @.metaProperty(\n\n	属性 = {\n		_get = function(){ \n			/*读取属性代码写在这里*/\n			return null;\n		}\n		_set = function( value ){\n			/*写入属性代码写在这里*/\n			..io.print( owner,value)\n		} 	\n	};\n	@{ _get = ..父属性表 } /*属性表可继承*/ \n)
+end intellisense**/
+

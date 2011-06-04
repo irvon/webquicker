@@ -1,0 +1,41 @@
+import fsys;
+namespace fsys;
+ 
+class batch{
+	ctor( dir,ext="*.*"){
+		this.dir = dir;
+		this.ext = ext;
+	};
+	
+	process = function(){
+		if(!this.proc){
+			error("请先指定proc回调函数",2)
+		}
+		..fsys.enum(  this.dir, 
+					this.ext, 
+					function(dir,file,fullpath,findData){ 
+						if(file){  
+		           			var str = ..string.load(fullpath);
+		           			if(str){
+		           				str = this.proc(str,fullpath)
+		           				if(type(str)==type.string)
+		           					..string.save(fullpath,str) 
+		           			}
+		           			
+						} 
+					} 
+				  );
+	} 
+}
+
+/**intellisense()
+fsys.batch(.(批处理目录,后缀名) = 参数可省略
+?fsys.batch = !batch.
+!batch.dir = 设置批处理目录
+!batch.ext = 设置批处理后缀名
+!batch.process() = 执行批处理
+!batch.proc = @.proc = function(str/*文件数据*/, path/*文件路径*/) {
+	io.print(path);
+	__/*请输入代码\n返回字符串则更新文件*/
+} 
+end intellisense**/

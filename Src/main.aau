@@ -1,26 +1,94 @@
 // 当前该框架尚处于测试阶段，请勿在实际工程中使用
+// http://localhost
 
-import webquicker.server;
-import win.ui;
-/*DSG{{*/
-var winform = win.form(parent=...; bottom=195;max=false;text="Web Quicker - 快手B/S应用开发框架";right=349 )
-winform.add( 
-static={ bottom=117;right=302;left=48;top=76;font=LOGFONT( name="宋体";h=-12 );transparent=1;z=1;text="Web服务器已开启，关闭该窗体停止服务。
-访问 http://127.0.0.1:5050/ 以查看结果。";cls="static" }
-)
-/*}}*/
+// import debug.log;
+namespace debug.log {
+	write = function () {};
+	flush = function () {};
+}
 
-io.open();
-io.print("The web service is running... ");
+import webquicker.service;
+
+var hServiceStatus;
+var SERVICE_STATUS = webquicker.service.SERVICE_STATUS();
+webquicker.service.MAIN_SERVICE_STATUS = SERVICE_STATUS;
 
 // 初始化
-function init() {
+init = function () {
+	select _CMDLINE {
+		case "-i" {
+			// 安装服务
+			webquicker.service.install();
+		}
+		case "-u" {
+			// 卸载服务
+			webquicker.service.uninstall();
+		}
+		case "-s" {
+			// 启动服务
+			var SERVICE_TABLE_ENTRY = {};
+			SERVICE_TABLE_ENTRY[1] = webquicker.service.SERVICE_TABLE_ENTRY();
+			SERVICE_TABLE_ENTRY[2] = webquicker.service.SERVICE_TABLE_ENTRY();
+			
+			SERVICE_TABLE_ENTRY[1].lpServiceName = _SERVICE_NAME;
+			SERVICE_TABLE_ENTRY[1].lpServiceProc = raw.tostdcall(serviceMain, "(int, string)");
+			
+			debug.log.write("StartServiceCtrlDispatcher...");
+			debug.log.flush();
+			webquicker.service.StartServiceCtrlDispatcher(raw.toarray(SERVICE_TABLE_ENTRY));
+			debug.log.write("StartServiceCtrlDispatcher...OK!");
+			debug.log.flush();
+		}
+	}
+}
+
+// 服务主体
+serviceMain = function (dwArgc, lpszArgv) {
+	debug.log.write("ServiceMain...");
+	debug.log.flush();
+	if (startService()) {
+		debug.log.write("RegisterServiceCtrlHandler...");
+		debug.log.flush();
+		hServiceStatus = webquicker.service.RegisterServiceCtrlHandler(_SERVICE_NAME, raw.tostdcall(serviceHandler, "(int)"));
+		debug.log.write("RegisterServiceCtrlHandler...OK!");
+		debug.log.flush();
+		if (!hServiceStatus) {
+			SERVICE_STATUS.dwCurrentState = 0x2/*_SERVICE_START_PENDING*/;
+		} else {
+			SERVICE_STATUS.dwCurrentState = 0x4/*_SERVICE_RUNNING*/;
+		}
+	} else {
+		SERVICE_STATUS.dwCurrentState = 0x2/*_SERVICE_START_PENDING*/;
+	}
+	
+	SERVICE_STATUS.dwServiceType = 0x20/*_SERVICE_WIN32_SHARE_PROCESS*/
+	SERVICE_STATUS.dwControlsAccepted = 0x4 | 0x1/*_SERVICE_ACCEPT_SHUTDOWN | _SERVICE_ACCEPT_STOP*/;
+	SERVICE_STATUS.dwWin32ExitCode = 0x0/*_NO_ERROR*/;
+	
+	webquicker.service.SetServiceStatus(hServiceStatus, SERVICE_STATUS);
+	debug.log.write("SetServiceStatus");
+	debug.log.flush();
+}
+
+// 服务 Handler
+serviceHandler = function (fdwControl) {
+	if (fdwControl == 0x5/*_SERVICE_CONTROL_SHUTDOWN*/ || fdwControl == 0x1/*_SERVICE_CONTROL_STOP*/) {
+		SERVICE_STATUS.dwCurrentState = 0x1/*_SERVICE_STOPPED*/;
+		webserver.stop();
+	}
+	webquicker.service.SetServiceStatus(hServiceStatus, SERVICE_STATUS);
+}
+
+// 服务函数
+startService = function () {
+	import webquicker.server;
 	webserver = webquicker.server();
-	webserver.start(5050, accept);
+	webserver.start(80, accept);
+	return true;
 }
 
 // 处理函数（在子线程中）
-function accept(hSocket) {
+accept = function (hSocket) {
 	import fsys.file;
 	import webquicker.parser;
 	
@@ -161,8 +229,3 @@ function accept(hSocket) {
 }
 
 init();
-
-winform.show();
-win.loopMessage();
-
-// io.close();

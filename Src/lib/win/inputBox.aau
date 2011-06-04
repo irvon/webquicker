@@ -1,0 +1,54 @@
+namespace win; 
+
+class  inputBox{
+	ctor(...){
+	
+ 		//this从win.form类继承，因此直接拥有了他的所有函数
+ 		parent,password =  ...     
+		
+/*DSG{{*/
+this = win.form( bottom=119;parent=parent;text="AAuto Form";left=0;right=425;top=0;mode="popup";cls="" )
+this.add( 
+input={ bottom=61;text="";left=45;top=36;z=3;right=396;edge=1;cls="edit" };
+btnOk={ bottom=102;right=254;left=180;top=74;style=1;z=1;text="确定";cls="button" };
+btnCancel={ bottom=103;right=339;left=265;top=75;z=2;text="取消";cls="button" };
+info={ bottom=31;right=355;left=25;top=13;transparent=1;notify=1;text="请输入";z=4;cls="static" }
+)
+/*}}*/
+
+		this.btnCancel.oncommand = function(id,event){
+			this.endModal() 
+		};
+		
+		this.btnOk.oncommand = function(id,event){ 
+			this.endModal( this.input.text )
+		};  
+	} 
+
+} 
+namespace inputBox{
+	//类有自已的名字空间，将外部名字空间导入类里面，这样就不需要加上..前缀访问了
+	import win;
+	import win.ui;   
+}
+ 
+/***intellisense()
+win.inputBox() = 创建一个输入对话框
+win.inputBox(__/*可选在此指定父窗口*/) = 创建一个输入对话框
+win.inputBox(0__/*可选在此指定父窗口*/,true) = 创建一个输入密码的对话框
+!inputBox.doModal() = 弹出输入对话框\n该函数返回用户输入的值\n取消则返回null空值
+!inputBox.info = !edit.
+!inputBox.input = !edit.
+!inputBox.text = 输入框标题
+!inputBox.setPos(.(x,y,宽,高,插入位置,参数) = 调整窗口位置或排序\n所有参数可选 
+!inputBox.getPos() = 返回相对坐标,宽,高 
+!inputBox.topmost()=窗体始终最前
+!inputBox.topmost(false)=取消窗体始终最前
+!inputBox.modifyStyle(.(remove,add) = 如果指定第三个参数，则使用此参数调用::SetWidnowPos 
+!inputBox.modifyStyleEx(.(remove,add) = 如果指定第三个参数，则使用此参数调用::SetWidnowPos  
+!inputBox.addtimer = @var tmId = ??.addtimer( \n	1000,\n	function(id){\n		/*定时回调函数*/\n	} \n)
+!inputBox.killtimer(__/*请输入ID*/) = 删除定时器
+!inputBox.settimer(__/*请输入ID*/,1000) = 重新设定定时器的延时时间
+?win.inputBox = !inputBox.
+end intellisense***/
+ 

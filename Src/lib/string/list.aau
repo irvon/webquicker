@@ -1,0 +1,110 @@
+namespace string  
+import util.metaProperty
+ 
+class list{ 
+    ctor(str,sep='\r\n',eq='=') { 
+        this[_SEP] = sep;
+        this[_EQ] = eq;
+
+        if(..io.exist(str) )
+        	str = ..string.load(str);
+        
+        if(str)	
+       		createList(this,str,sep,eq);
+    };
+     
+    @metaProperty
+}
+
+namespace list{  
+
+	_SEP = -1;
+	_PATH = -2;
+	_EQ = -3;
+	
+	import string;
+	
+	createList = function(this,str="",sep,eq){ 
+		var k; 
+		var tlist = string.split(str,sep);
+    	for( i,v in tlist){  
+        	pos = string.find(v,eq);
+        	if(pos){ 
+        		k = string.trim(string.left(v,pos-1));
+        		if( this[k]===null ){
+        			..table.push(this,k ); 
+        		}
+        		this[[k]] = string.trim( string.sub(v,pos+1) ); 
+        	}
+    	}  	
+	}	 
+	
+	metaProperty = ..util.metaProperty( 
+		save = function(filepath){ 
+			if(filepath)
+				owner[[_PATH]] = filepath;  
+			
+    		..string.save(owner[[_PATH]] ,tostring(owner) )   
+    	}
+    	load = function(filepath){  
+    		if( ! #filepath ){
+    			error("请指定正确的文件路径",2)
+    		}
+    		var sep = owner[[_SEP]];
+    		var eq = owner[[_EQ]]; 
+    		for(k,v in owner ){
+    			owner[[k]] = null; 
+    		} 
+    		owner[[_PATH]] = filepath;
+       		owner[[_EQ]] = eq
+       		owner[[_SEP]] = sep; 
+    	 	
+    		var str = ..string.load( filepath ) 
+       		
+       		createList(owner,str,sep,eq);  
+    	}
+		set = function(k,v) {   
+			if( owner[[k]] === null )
+				..table.push(owner,k) 
+				
+			owner[[k]] = v; //使用[[]]操作符不会再次触发元方法，可以避免函数递归溢出。
+			return owner ; 
+		} 
+		find = function(k){
+    		for(i=1;#owner){
+    			if(owner[i]==k)
+    				return i; 
+    		} 
+    	}  
+		each = function(){
+			var this = owner;
+			return function(i=0){
+				i++;
+				var k = this[i];
+				return k?i,k,this[k]
+			} 
+		} 
+		_tostring = function() {
+			if(  not #owner ) return "";
+ 			var eq = owner[_EQ]
+			var t ={}
+			for( i= 1 ; #owner){
+    			..table.push(t, ..string.concat( owner[i],eq,owner[owner[i] ] ) );
+			} 
+			return ..string.join(t,owner[_SEP]) ;
+		};
+	)
+}
+ 
+
+/**intellisense()
+string.list(__/*请输入字符串*/) = 创建字符串列表\n可选参数(字符串,分隔符,键值对分隔符)
+!stringlist.load("__/*文件路径*/") = 加载配置文件
+!stringlist.save("__/*文件路径*/") = 保存配置文件
+!stringlist.save() = 保存配置文件
+!stringlist.find("__/*键名*/") = 查找指定键所在位置
+!stringlist.each = @for i,k,v in ??.each() { 
+	io.print("顺序:"+i,"名字:"+k,"值:"+v )__ 
+}
+?string.list = !stringlist.
+end intellisense**/

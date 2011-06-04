@@ -1,0 +1,85 @@
+//XXCARL 对称加密算法
+/* xxcarl encryption arithmetic library. 
+* Copyright (C) 2010 Ecranesoft Lab<web@ecranesoft.com>
+* Author		carl
+* Version:      1.0
+* LastModified: May 18, 2010
+* This library is free.  You can redistribute it and/or modify it. 
+* 不支持中文字符加密解密
+* 此算法是由网上译过来的相对简单的对称加密,仅供学习,
+*/
+ 
+namespace labs.string.xxcarl 
+
+//频繁使用的外部函数存为本地函数，减少名字空间查询次数。
+var math = ..math;
+var format=..string.format;
+var upper=..string.upper;
+var left=..string.left;
+var sub=..string.sub;
+var pack=..string.pack;
+math.randomize();
+
+function encrypt(str,vkey="carl"){//加密
+	if( type(str)!= type.string)return;
+    if (str == "") {
+        return "";
+    }
+    var vkeylen = #vkey;
+    var vKeyPos = 0;
+    var vSrcAsc = 0;
+    var vRange = 256;
+    var voffset = 0;
+    var vDest = "";
+	voffset=math.random(1,vRange)
+    vDest = format("%x",voffset);
+	vDest = #vDest < 2 ? "0" ++ vDest : vDest;
+    for (i = 1; #str; 1)
+    {
+        vSrcAsc = (str[i] + voffset) % 255;
+        vKeyPos=vKeyPos < vkeylen ? (vKeyPos + 1) : 1
+        vRange = vkey[vKeyPos];
+        vSrcAsc = vSrcAsc ^ vRange;        
+        var v1 =format("%x",vSrcAsc);
+		v1 = #v1 < 2 ? "0" ++ v1 : v1;
+        vDest = vDest ++ v1;
+        voffset = vSrcAsc;
+    }
+    vDest = upper(vDest);
+    return vDest;
+}	
+
+function decrypt(str,vkey="carl"){//解密
+	if( type(str)!= type.string)return;
+    if (str == "") {
+        return "";
+    }
+    var vkeylen = #vkey;
+    var vKeyPos = 0;
+    var vSrcPos = 0;
+    var vSrcAsc = 0;
+    var vTmpSrcAsc = 0;
+    var vDest = "";
+    var vOffset = tonumber(left(str,2),16);
+    if(vOffset==null){return ; }
+    vSrcPos = 3;
+    while (vSrcPos <= #str)
+    {
+        vSrcAsc = tonumber(sub(str,vSrcPos, (vSrcPos+1)),16);
+        if(vSrcAsc==null){return ; }
+        vKeyPos = vKeyPos < vkeylen ? vKeyPos + 1 : 1
+        vTmpSrcAsc = vSrcAsc ^ vkey[vKeyPos];
+    	vTmpSrcAsc = vTmpSrcAsc <= vOffset ? 255 + vTmpSrcAsc - vOffset : vTmpSrcAsc - vOffset;
+        vDest = vDest ++ pack(vTmpSrcAsc);
+        vOffset = vSrcAsc;
+        vSrcPos = vSrcPos + 2;
+    }
+    return vDest;
+ }
+
+/*intellisense(labs.string.xxcarl)
+encrypt(__,"密钥") = xxcarl加密
+decrypt(__,"密钥") = xxcarl解密
+end intellisense*/
+
+ 

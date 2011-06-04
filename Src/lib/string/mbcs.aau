@@ -1,0 +1,74 @@
+//双字节字符串增强支持库
+namespace string
+import util.metaProperty
+
+import table;
+var push =  table.push;  
+var gmatch = gmatch;
+var join = join;
+
+class mbcs{
+	ctor( wstr,pattern_exp = '(<\x81-\xFE.>|.)'  ){ 
+		for wchar in gmatch(wstr,pattern_exp ) { 
+  	    	push( this,wchar ) 
+		}	 
+	};
+	
+	sub = function(i,j){ 
+		var subtab = { ..table.unpack(this,i,j) }
+		return  join( subtab); 
+	}
+	
+	left = function(len){ 
+		var subtab = { ..table.left(this,len) }
+		return join( subtab); 
+	}
+	
+	right = function(len){
+		var subtab = { ..table.right(this,len) }
+		return join( subtab);  
+	}
+	reset = function(){
+		wstr = tostring(this)
+		..table.pop(this,#this)
+		for wchar in gmatch(wstr,'(<\xA1-\xF7\xA1-\xFE>|.)') { 
+  	    	push( this,wchar ) 
+		}	
+	}
+	limit = function(len,rep="..."){
+		return #this>len? this.left(len) ++ rep : tostring(this)  
+	}
+	
+	@metaProperty
+}
+
+mbcs.metaProperty = util.metaProperty(
+
+	find = function(s){
+		return find(tostring(owner),s);
+	}
+	match = function(s){
+		return match(tostring(owner),s);
+	}
+	gmatch = function(s){
+		return gmatch(tostring(owner),s);
+	}
+	_tostring = function(){
+		return join(owner)
+	}
+	
+) 
+
+/**intellisense()
+!mbcs.sub(.(开始位置,结束位置) = 截取字符串
+!mbcs.left(.(长度) = 从左侧截取字符串
+!mbcs.right(.(长度) = 从右侧截取字符串
+!mbcs.find(__/*模式表达式*/) = 查找字符串
+!mbcs.match(__/*模式表达式*/) = 返回匹配字符串
+!mbcs.gmatch(__/*模式表达式*/) = 创建迭代器,用于for...in循环
+!mbcs.reset() = 重新计算字符串长度
+!mbcs.limit(__/*长度*/) = 限制字符串长度
+!mbcs.limit(__/*长度*/,"...") = 限制字符串长度
+?string.mbcs = !mbcs.
+string.mbcs = 中文字符串增强函数库
+end intellisense**/

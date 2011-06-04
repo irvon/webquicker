@@ -1,0 +1,83 @@
+namespace win 
+
+guid = class{
+	INT Data1;
+	WORD Data2;
+	WORD Data3;
+	BYTE Data4[8]="";
+	@_meta;
+}  
+
+namespace guid{
+	
+	_meta = { 
+	
+		_tostring = function() {
+			var re, lpsz= UuidToString(owner,null);
+			var struct = ..raw.tostring(  lpsz );
+			RpcStringFree(lpsz); //释放UuidToString分配的字符串内存
+			return struct ;
+		}
+	}
+	
+	//Rpcrt4是不常用的DLL，因此不使用::声明为全局常量，以减少全局名字空间体积
+	//但是仍然使用 := 以避免Rpcrt4在其他文件中被声明为常量时导致的冲突
+	Rpcrt4 := ..raw.loadDll("Rpcrt4.dll");
+	
+	create = function() {
+    	var guid = ..win.guid();	
+    	UuidCreate(guid);  
+    	return guid;
+	};
+	
+	fromString = function(progId){
+		var guid = ..win.guid();
+		if(progId[1]=='{'# ){
+			CLSIDFromString( ..string.toUnicode( progId )  ,guid) ;
+		}
+		else{
+			CLSIDFromProgID(..string.toUnicode( progId ),guid);
+		}
+		
+		return guid;
+	} 
+	 	
+	UuidCreate = Rpcrt4.api( "UuidCreate","int(struct &guid)");
+	UuidToString = Rpcrt4.api( "UuidToStringA","int(struct guid ,pointer &pStr)");
+	RpcStringFree = Rpcrt4.api("RpcStringFreeA","int(pointer &pStr)"); 
+	::Ole32 := ..raw.loadDll("Ole32.dll")
+	CLSIDFromString := ::Ole32.api("CLSIDFromString","int(string lpszProgID,struct& pCLSID)")
+	CLSIDFromProgID := ::Ole32.api("CLSIDFromProgID","int(string lpszProgID,struct& pCLSID)")
+	 
+	CoTaskMemFree := Ole32.api("CoTaskMemFree","void(pointer hMem)" ) 
+	lstrlenW = ::Kernel32.api("lstrlenW","int(pointer lpString)")
+	
+	ProgIDFromCLSID := ::Ole32.api("ProgIDFromCLSID","int(struct guid,pointer &lpszProgID)")  
+	
+	toProgId = function(guid){
+		if( type(guid) == type.string )
+			guid = assert( fromString(guid),"错误的GUID" )
+			
+		var re,lp = ProgIDFromCLSID(guid,null);
+		if(!re){
+			var len = lstrlenW(lp);
+			var str = ..raw.tostring( lp,len*2); 
+			str = ..string.fromUnicode(str);
+			CoTaskMemFree(lp)
+			return str; 
+		} 
+	}
+ 
+	
+}
+
+/**intellisense()
+win.guid.create() = 创建GUID并初始化为唯一值\ncom.GUID()函数功能与此相同
+win.guid() = 创建GUID结构体\n初始化为空值  
+win.guid.fromString("__/*请输入ProgID*/") = 字符串转换为GUID 
+win.guid.toProgId("__/*请输入GUID*/") = CLSID转换为ProgId 
+CLSIDFromString = @win.guid.fromString("__/*请输入ProgID*/")
+CLSID = @win.guid()
+IID =  @win.guid()
+end intellisense**/
+

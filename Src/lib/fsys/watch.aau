@@ -1,0 +1,107 @@
+
+namespace fsys 
+
+watch = class{
+
+//可以有任意多个不定参数、指定一个或多个文件或目录的路径
+ctor(  ...  )begin
+	this.path ={ ... } //将不定参数转换为table集合。
+	for(k,v in this.path){ 
+	    this.path[ k ] = ..io.fullpath( v ) //将相对路径转换为绝对路)径
+	} 
+end; 
+
+run = function ( flag )  { 
+	flag := 0x00000001/*_FILE_NOTIFY_CHANGE_FILE_NAME*/ | 0x00000002/*_FILE_NOTIFY_CHANGE_DIR_NAME*/
+	
+    //参数一为回调函数，可以为null
+    //参数二为监视选项
+    //自参数三开始可以有任意多个不定参数、指定一个或多个文件或目录的路径
+	var tNotificationHandle = {};
+	 
+	
+	var tWaitHandle =  {};  
+ 
+	
+	//遍历所有路径
+	for i,v in  this.path  { 
+	    //开始监视目标文件 
+	    var dwChangeHandle   = ::FindFirstChangeNotification( v , 0x1/*_TRUE*/ , flag ); 
+		if( dwChangeHandle == -1 ) {
+		    
+/*
+			//弹出错误信息 
+			var msg,err =  ..lasterr(); 
+			error(msg,2)  
+*/
+			 
+			return false;
+		}; 
+		
+	 
+		//记录监视API返回的句柄
+		..table.push( tWaitHandle ,dwChangeHandle ); 
+		tNotificationHandle[i] = dwChangeHandle;
+	} //遍历数组(索引为数字)	
+	
+	//tWaitHandle = ..raw.toarray( tWaitHandle ,"int","handle" ); 
+	while( true ) { 
+	
+		//dwWaitStatus=::WaitForMultipleObjects(#(tWaitHandle.handle), tWaitHandle ,0, -1); 
+		dwWaitStatus = ..thread.waitOne(tWaitHandle);
+		
+		if( ( dwWaitStatus > 0 ) and ( dwWaitStatus <= #(this.path) ) ){ 
+			if(this.onChange){
+    			if( this.onChange(this.path[dwWaitStatus],flag) ){
+        			 ::FindNextChangeNotification(tNotificationHandle[dwWaitStatus])  ;
+        			}
+    			else
+    			{
+        			for i,hv in  tNotificationHandle begin 
+        				::FindCloseChangeNotification(hv) 
+        			end; 
+        			
+        			return path[dwWaitStatus];
+        		}
+        	}
+			else
+			{
+        		for i,hv in  tNotificationHandle  begin 
+            		::FindCloseChangeNotification(hv)
+            		return true;
+        		end;
+			
+				win.delay(10);  
+			}
+		};
+	};
+
+} 
+ 
+}
+
+namespace watch{
+
+	//用:=防止在其他文件中被定义为常量
+	FindFirstChangeNotification := ::Kernel32.api("FindFirstChangeNotificationA", "pointer(string lpPathName,int bWatchSubtree,INT dwNotifyFilter)");
+	FindCloseChangeNotification := ::Kernel32.api("FindCloseChangeNotification", "int(pointer hChangeHandle)");
+	FindNextChangeNotification := ::Kernel32.api("FindNextChangeNotification", "int(pointer hChangeHandle)");
+
+}
+
+ 
+/**intellisense()
+_FILE_NOTIFY_CHANGE_FILE_NAME   = @0x00000001/*_FILE_NOTIFY_CHANGE_FILE_NAME*/
+_FILE_NOTIFY_CHANGE_DIR_NAME   = @0x00000002/*_FILE_NOTIFY_CHANGE_DIR_NAME*/
+_FILE_NOTIFY_CHANGE_ATTRIBUTES = @0x00000004/*_FILE_NOTIFY_CHANGE_ATTRIBUTES*/
+_FILE_NOTIFY_CHANGE_SIZE       = @0x00000008/*_FILE_NOTIFY_CHANGE_SIZE*/  
+_FILE_NOTIFY_CHANGE_LAST_WRITE = @0x00000010/*_FILE_NOTIFY_CHANGE_LAST_WRITE*/
+_FILE_NOTIFY_CHANGE_LAST_ACCESS= @0x00000020/*_FILE_NOTIFY_CHANGE_LAST_ACCESS*/
+_FILE_NOTIFY_CHANGE_CREATION   = @0x00000040/*_FILE_NOTIFY_CHANGE_CREATION*/
+_FILE_NOTIFY_CHANGE_SECURITY   = @0x00000100/*_FILE_NOTIFY_CHANGE_SECURITY*/
+
+fsys.watch = @fsys.watch("__/*请输入一个或多个要监视的目录*/") 
+!watch.run(1|2__/*输入_FILE_NOTIFY_开头的常量*/) = run( _FILE_NOTIFY_CHANGE_FILE_NAME | _FILE_NOTIFY_CHANGE_DIR_NAME )\n启动监控程序
+!watch.onChange =  @.onChange = function(path,flag) { \nio.print("改变了" + path,flag)  ;\nreturn false; /*停止监视*/   \n}
+?fsys.watch = !watch.
+end intellisense**/

@@ -1,0 +1,155 @@
+ 
+namespace gdip 
+
+//创建graphics类
+class graphics {
+	 
+	ctor(arg){
+		 
+		if(type(arg)==type.pointer)
+			this.pGraphics = gdip.assert(gdip.CreateFromHDC(arg) );
+		else{
+			if(type(arg)!=type.table) {
+				error("无效参数",2)
+			}
+			
+			if(arg.hwnd)
+				this.pGraphics = gdip.assert(gdip.CreateFromHWND(arg.hwnd) );
+			else if(arg.hdc)  
+				this.pGraphics = gdip.assert(gdip.CreateFromHDC(arg.hdc) );
+			else if(arg.pImage)  
+				this.pGraphics = gdip.assert( gdip.GetImageGraphicsContext( arg.pImage ) );
+			
+		}
+		
+		
+		if(!this.pGraphics)
+			error("无效参数)",2)
+	
+	}
+
+	_gcdata = ..gcdata(
+		_gc = function(){ 
+			//析构函数 
+			this.delete()
+		} 
+	);
+	@metaProperty//元表指向属性表
+}
+
+
+ 
+ 
+namespace graphics{
+
+	gdip = ..gdip; 
+	  
+	import util.metaProperty;//导入属性表支持库
+	metaProperty = util.metaProperty(
+	 
+		smoothingMode = {
+			_get = function(){ 
+				return gdip.assert( gdip.GetSmoothingMode(owner[["pGraphics"]], 0) ); 
+			} 
+			_set = function(v){ 
+				gdip.assert( gdip.SetSmoothingMode(owner[["pGraphics"]], v) ); 
+			}  	
+		}; 
+		textRenderingHint = {
+			_get = function(){ 
+				return gdip.assert( gdip.GetTextRenderingHint(owner[["pGraphics"]], 0) ); 
+			} 
+			_set = function(v){ 
+				gdip.assert( gdip.SetTextRenderingHint(owner[["pGraphics"]], v) ); 
+			}  	
+		}; 
+		
+		clear = function(argb){
+		gdip.assert( gdip.GraphicsClear(owner[["pGraphics"]],argb) );
+		}
+		rotate = function(angle,order){
+		gdip.assert( gdip.RotateWorldTransform(owner[["pGraphics"]],angle,order) );
+		}
+		translate = function(dx,dy,order){
+		gdip.assert( gdip.TranslateWorldTransform(owner[["pGraphics"]],dx,dy,order) );
+		}
+		SetClipRectI = function(x, y,width,height,combineMd){
+		gdip.assert( gdip.SetClipRectI(owner[["pGraphics"]],x, y,width,height,combineMd) );
+		}
+		resetClip = function(){
+		gdip.assert( gdip.ResetClip(owner[["pGraphics"]]) );
+		}
+		fillPath = function(brush, strPath){
+		gdip.assert( gdip.FillPath(owner[["pGraphics"]], brush, strPath) ); 
+		}
+		
+		
+		drawPath = function(pen, strPath){
+		gdip.assert( gdip.DrawPath(owner[["pGraphics"]], pen, strPath) ); 
+		}
+		
+		drawString = function( str, thefont, layoutRect,stringFormat,brush){
+		gdip.assert( gdip.DrawString(owner[["pGraphics"]], ..string.toUnicode(str),-1, thefont, layoutRect,stringFormat,brush) ); 
+		}
+		drawLineI = function( pen,x1,y1,x2,y2){
+		gdip.assert( gdip.DrawLineI(owner[["pGraphics"]], pen,x1,y1,x2,y2 ) ); 
+		}
+		drawLine = function( pen,x1,y1,x2,y2){
+		gdip.assert( gdip.DrawLine(owner[["pGraphics"]], pen,x1,y1,x2,y2 ) ); 
+		}
+		drawRectangleI = function( pen,x1,y1,width,height){
+		gdip.assert( gdip.DrawRectangleI(owner[["pGraphics"]], pen,x1,y1,width,height) ); 
+		}
+		drawRectangle = function( pen,x1,y1,width,height){
+		gdip.assert( gdip.DrawRectangle(owner[["pGraphics"]], pen,x1,y1,width,height) ); 
+		}
+		fillRectangleI = function( brush,x1,y1,width,height){
+		gdip.assert( gdip.FillRectangleI(owner[["pGraphics"]], brush,x1,y1,width,height) ); 
+		}
+		fillRectangle = function( brush,x1,y1,width,height){
+		gdip.assert( gdip.FillRectangle(owner[["pGraphics"]], brush,x1,y1,width,height) ); 
+		}
+		fillEllipseI = function( brush,x1,y1,width,height){
+		gdip.assert( gdip.FillEllipseI(owner[["pGraphics"]], brush,x1,y1,width,height) ); 
+		}
+		fillEllipse = function( brush,x1,y1,width,height){
+		gdip.assert( gdip.FillEllipse(owner[["pGraphics"]], brush,x1,y1,width,height) ); 
+		}
+		
+		drawImageRect = function( img,x1,y1,width,height){
+		gdip.assert( gdip.DrawImageRect(owner[["pGraphics"]], img,x1,y1,width,height) ); 
+		}
+		drawImageRectI = function( img,x1,y1,width,height){
+		gdip.assert( gdip.DrawImageRectI(owner[["pGraphics"]], img,x1,y1,width,height) ); 
+		}
+		drawImageRectRectI = function( img ,dstX,dstY,dstWidth,dstHeight,srcx,srcy,srcwidth,srcheight,srcUnit,imageAttributes ,callback,callbackData){
+		gdip.assert( gdip.DrawImageRectRectI(owner[["pGraphics"]], img,dstX,dstY,dstWidth,dstHeight,srcx,srcy,srcwidth,srcheight,srcUnit,imageAttributes ,callback,callbackData) ); 
+		}
+		
+		setInterpolationMode = function( interpolation){
+		gdip.assert( gdip.SetInterpolationMode(owner[["pGraphics"]], interpolation) );
+		} 
+		delete = function(){
+			if(owner[["pGraphics"]]){
+				gdip.DeleteGraphics(owner[["pGraphics"]])
+				owner[["pGraphics"]] = null;//让其他的函数都用不了
+			}
+		}  
+		//自动转换为API指针
+		_topointer = function(){
+			return owner[["pGraphics"]];
+		}
+		
+		
+	)  
+
+} 
+
+
+/**intellisense()
+gdip.graphics(__/*请输入参数*/) = 根据指定的参数,可选参数如下：winform等包含hwnd字段的table表\n也可以使用gdip.image对象作为参数\n或使用一个数值指定hdc作为参数
+!gdipgraphics.width = 宽度
+!gdipgraphics.dispose() = 释放图像\n此对象支持自动释放,不必手工调用此函数
+!gdipgraphics.setInterpolationMode(__/*请输入参数*/) = 设置图像缩放时的插值模式
+?gdip.graphics = !gdipgraphics.
+end intellisense**/

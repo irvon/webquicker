@@ -1,0 +1,44 @@
+//多媒体 
+/************************************
+Author                : dasan
+Time                  : 4,8, 2010
+Version               : V 0.1
+Description           : windows声音函数调用
+************************************/
+
+namespace win.mm
+ 
+Winmm  :=  ..raw.loadDll("Winmm.dll");
+
+/*intellisense(win.mm)*/
+TimeGetTime := Winmm.api("timeGetTime","long()" ) //精确计时器，精确到1ms 
+Beep := ::Kernel32.api("Beep","int(int a,int b)"); //\n参数1：声音频率(从37Hz到32767Hz)\n参数2：持续时间(毫秒)。 -1，示一直播放声音  
+/*end intellisense*/
+
+
+var MessageBeep = ::User32.api("MessageBeep","int(int kType)") 
+var PlaySound = Winmm.api("PlaySound","int(pointer pszSound,int hmod,int fdwSound") 
+ 
+msgBeep = function(ktype = -1 ){
+MessageBeep(ktype);
+} 
+
+playSound = function(filepath,flag = 0x0001 /*_SND_ASYNC*/){ 
+    if(!filepath)
+    	PlaySound(null,0,flag)
+    else
+		PlaySound( ..io.fullpath(filepath),0,flag)
+} 
+ 
+/**intellisense(win.mm)
+msgBeep() = 从机器的扬声器中发出蜂鸣声
+msgBeep(0x40/*_MB_ICONASTERISK*/) =　　播放由SystemAsterisk定义的声音。 
+msgBeep(0x30/*_MB_ICONEXCLAMATION*/) = 播放由SystemExclamation定义的声音。 
+msgBeep(0x20/*_MB_ICONQUESTION*/) =　　播放由SystemQuestion定义的声音。 
+msgBeep(0x10/*_MB_ICONHAND*/) =　　　　播放由SystemHand定义的声音。 
+msgBeep(0x0/*_MB_OK*/) =　　　　　　   播放由SystemDefault定义的声音。0xFFFFFFFF
+playSound() = 停止播放声明
+playSound("/__") = 播放wav文件
+playSound("/__",0x0008) = 循环播放wav文件
+end intellisense**/
+ 

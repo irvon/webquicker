@@ -1,0 +1,136 @@
+namespace win.image;
+
+/*intellisense(win.image)*/
+LoadCursorA = ::User32.api(  "LoadCursorA", "pointer(pointer,string)")
+LoadCursorFromFileA =  ::User32.api("LoadCursorFromFileA","pointer(string lpFileName)")
+DestroyIcon = ::User32.api("DestroyIcon","int(pointer hIcon)")
+DestroyCursor = ::User32.api("DestroyCursor","int(pointer hCursor)")
+/*end intellisense*/
+
+//LoadCursorFromFile =  User32.api("LoadCursorFromFileA","pointer(string lpFileName)")
+
+loadIcon = function(id,instance){  
+	if(type(id)==type.number){
+		id = topointer(id)
+	}
+	return ::LoadIcon(instance,id); 
+}
+loadCursor = function(id,instance){   
+	if(type(id)==type.number){
+		id = topointer(id)
+	}
+	return LoadCursorA(instance,id); 
+}
+loadImage = function(id,instance){   
+	if(type(path)==type.number){
+		path = topointer(path)
+	} 
+	return ::LoadImage( , path,0x0/*_IMAGE_BITMAP*/,0,0,0 ); 
+}
+
+//查找图标文件,如果在资源文件中,创建临时文件
+var findpath  = class {
+	ctor( path){ 
+		if( not  ..io.exist(path) ){
+			var buf = ..string.load(path);
+			if(!buf)return;
+			
+			this.tmp = ..io.tmpname() 
+			..string.save(this.tmp,buf ) 
+			this.safepath = this.tmp  
+			
+		}
+		else {
+			this.safepath = ..io.fullpath(path)
+		}
+		
+		
+	
+	};
+	free = function(){
+		if(this.tmp)
+			..io.remove(this.tmp)
+	}
+	
+	
+}
+
+ 
+
+loadIconFromFile = function(path ){
+    var finder = findpath(path)
+	assert( finder,'错误的图标文件路径\n'+path) ;
+	
+	var hicon  = ::LoadImage( ,finder.safepath,0x1/*_IMAGE_ICON*/,0,0,0x10/*_LR_LOADFROMFILE*/ );
+	assert(hicon,"加载图标失败"+path)
+	finder.free() //删除临时文件
+	  
+	var cdata = ..raw.malloc(1)
+	cdata@={
+		_topointer = function(){
+			return hicon
+		}
+		_gc = function(){
+			DestroyIcon(hicon)
+		} 
+	}
+	return cdata;
+}
+
+loadCursorFromFile = function(path ){
+	var finder = findpath(path)
+	assert( finder,'错误的图标文件路径\n'+path)  
+	
+	hcur = LoadCursorFromFileA( finder.safepath ); 
+	assert(hcur,"加载图标失败"+path)
+	finder.free()//删除临时文件
+	
+	var cdata = ..raw.malloc(1)
+	cdata@={
+		_topointer = function(){
+			return hcur
+		}
+		_gc = function(){
+			DestroyCursor(hcur) 
+		} 
+	}
+	return cdata;
+}
+
+ 
+
+loadImageFromFile  = function(path,instance){  
+
+	var picon;
+	if( not  ..io.exist(path) ){
+		var buf = ..string.load(path);
+		assert( buf ,'错误的图像文件路径\n'+path) ;
+		var tmp = ..io.fullpath( io.tmpname() )
+		..string.save(tmp,buf ) 
+		picon = ::LoadImage( , tmp ,0x0/*_IMAGE_BITMAP*/,0,0,0x10/*_LR_LOADFROMFILE*/ ); 
+		io.remove(tmp)
+	}
+	else 
+		picon = ::LoadImage( , ..io.fullpath(path),0x0/*_IMAGE_BITMAP*/,0,0,0x10/*_LR_LOADFROMFILE*/ );
+		
+	var cd = ..raw.malloc(1)
+	cd@={
+		_topointer = function(){
+			return picon
+		}
+		_gc = function(){
+			DestroyIcon(picon)
+		} 
+	}
+	return cd;
+}
+/**intellisense(win.image)
+loadIconFromFile(__/*请输入图标路径*/) = 自文件载入图标,自动支持AAuto资源文件
+loadImageFromFile(__/*请输入BMP位图路径*/) = 自文件载入位图,自动支持AAuto资源文件
+loadCursorFromFile(__/*请输入BMP位图路径*/) = 自文件载入光标,自动支持AAuto资源文件
+loadIcon(__/*请输入资源名*/,模块句柄) = 自图标资源载入图标
+loadImage(__/*请输入资源名*/,模块句柄) = 自位图资源载入位图
+loadCursor(__/*请输入资源名*/,模块句柄) = 自光标资源载入光标
+end intellisense**/
+
+ 

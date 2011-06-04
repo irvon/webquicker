@@ -1,0 +1,217 @@
+namespace win.ui.ctrl; 
+import win.ui.ctrl.metaProperty;//导入控件属性元表支持
+
+class button{
+    ctor(parent,tvalue){ 
+    	if( tvalue ){
+			if(tvalue.flat) tvalue.style |= 0x8000/*_BS_FLAT*/;
+			if(tvalue.edge) tvalue.exstyle |= 0x20000/*_WS_EX_STATICEDGE*/;	
+			if(tvalue.multiline ) tvalue.style |= 0x2000/*_BS_MULTILINE*/	
+			tvalue.style |=  0x2000/*_BS_MULTILINE*/;
+			
+			select(tvalue.align) {
+			case  "left"  
+	   		tvalue.style |= 0x100/*_BS_LEFT*/;
+			case "right" 
+	   		tvalue.style |= 0x200/*_BS_RIGHT*/; 
+			else 
+	   		tvalue.style |= 0x300/*_BS_CENTER*/;  
+			}
+			
+			select(tvalue.valign) {
+			case  "top"  
+	   		tvalue.style |= 0x400/*_BS_TOP*/;
+			case "bottom" 
+	   		tvalue.style |= 0x800/*_BS_BOTTOM*/; 
+			else 
+	   		tvalue.style |= 0xC00/*_BS_VCENTER*/;  
+			} 
+		}
+		 
+	}
+	@metaProperty;
+}
+
+button.metaProperty = ..win.ui.ctrl.metaProperty(
+
+	image = { 
+		_set = function( v ){
+		 	var ipic = ..win.ole.image.load(v)
+			var hpic,imgtype = ipic.CopyHandle() ;
+			if( imgtype ==0x1/*_IMAGE_ICON*/ )
+			{ 
+			     var style   =   ::GetWindowLong(owner.hwnd,  0xFFFFFFF0/*_GWL_STYLE*/);   
+			     ::SetWindowLong(owner.hwnd,0xFFFFFFF0/*_GWL_STYLE*/,style | 0x40/*_BS_ICON*/ );
+		         ::SendMessage(owner.hwnd, 0xF7/*_BM_SETIMAGE*/, topointer(0x1/*_IMAGE_ICON*/),hpic); 
+		    }
+		    else if( imgtype ==0x0/*_IMAGE_BITMAP*/ ){
+		         var style   =   ::GetWindowLong(owner.hwnd,  0xFFFFFFF0/*_GWL_STYLE*/);   
+			     ::SetWindowLong(owner.hwnd,0xFFFFFFF0/*_GWL_STYLE*/,style | 0x80/*_BS_BITMAP*/ );
+		         SendMessage(owner.hwnd, 0xF7/*_BM_SETIMAGE*/, topointer(0x0/*_IMAGE_BITMAP*/),hpic);
+		    }
+		} 	
+	} 
+)
+
+
+class radiobutton{
+    ctor(parent,tvalue){ 
+       if( tvalue ){
+       	tvalue.style |= 0x9/*_BS_AUTORADIOBUTTON*/  //BS_RADIOBUTTON 
+       	tvalue.cls = "button" 
+       	if(tvalue.edge) tvalue.exstyle |= 0x200/*_WS_EX_CLIENTEDGE*/;
+       }
+    }
+	@metaProperty;
+}
+radiobutton.metaProperty = ..win.ui.ctrl.metaProperty(
+
+	checked = {
+		_get = function(){ 
+			 return  ::SendMessage(owner.hwnd ,0xF0/*_BM_GETCHECK*/);
+		}
+		_set = function( v ){
+			::SendMessage(owner.hwnd ,0xF1/*_BM_SETCHECK*/,topointer(v?1:0));
+		} 	
+	}
+)
+ 
+
+class checkbox{
+    ctor(parent,tvalue){ 
+       if( tvalue ){
+       	tvalue.style |= 0x3/*_BS_AUTOCHECKBOX*/  
+       	tvalue.cls = "button" //这个类名仅用于创建窗口 
+       	if(tvalue.edge) tvalue.exstyle |= 0x200/*_WS_EX_CLIENTEDGE*/;
+       	tvalue.exstyle |= 0x20/*_WS_EX_TRANSPARENT*/;
+       }
+    }
+	@metaProperty;
+}
+checkbox.metaProperty = ..win.ui.ctrl.metaProperty(
+
+	checked = {
+		_get = function(){ 
+			 return  ::SendMessage(owner.hwnd ,0xF0/*_BM_GETCHECK*/);
+		}
+		_set = function( v ){
+			::SendMessage(owner.hwnd ,0xF1/*_BM_SETCHECK*/,topointer(v?1:0));
+		} 	
+	}
+)
+  
+  
+class groupbox{
+    ctor(parent,tvalue){  
+    	if( tvalue ){
+    		tvalue.style |= 0x7/*_BS_GROUPBOX*/  
+    		tvalue.cls = "button" //这个类名仅用于创建窗口 
+			if(tvalue.edge) tvalue.style |= 0x20000/*_WS_EX_STATICEDGE*/;
+		}	 
+    }
+	@metaProperty;
+}
+groupbox.metaProperty = ..win.ui.ctrl.metaProperty( )
+
+
+
+/***intellisense()
+
+ 
+!button.text = 按钮文本属性
+!button.hwnd = 控件句柄
+!button.id = 控件ID
+!button.parent = 父窗口
+!button.parent.hwnd = 父窗口句柄
+!button.hide = 控件是否隐藏
+!button.disabled = 控件ID
+!button.left = 左侧坐标
+!button.right = 右侧坐标
+!button.top = 顶部坐标
+!button.bottom = 底部坐标
+!button.redraw() = 刷新
+!button.show(true__) = 显示控件
+!button.rect = 控件区块位置(::RECT结构体)
+!button.clientRect =  控件客户区块位置(::RECT结构体)
+!button.font = 控件字体(::LOGFONT结构体)
+!button.clientRect =  获取控件客户区块位置(::RECT结构体)
+!button.theme = 外观主题,例如\nwinform.button.theme = "Explorer"\nwinform.button.theme = false
+!button.modifyStyle(.(remove,add) = 如果指定第三个参数，则使用此参数调用::SetWidnowPos 
+!button.modifyStyleEx(.(remove,add) = 如果指定第三个参数，则使用此参数调用::SetWidnowPos
+!button.capture = 是否捕获全局鼠标消自息
+!button.close() = 关闭控件窗口
+!button.invalidate(__/*可选使用::RECT()对象指定客户区*/) = 使窗口绘图区无效
+!button.invalidate(__/*可选使用::RECT()对象指定客户区*/,0) = 使窗口绘图区无效\n不刷新背景
+!button.update() = 重绘invalidate函数指定的区块
+!button.setFocus() = 设置焦点 
+!button.setPos(.(x坐标,y坐标,宽,高,插入位置,参数) = 调整窗口位置或排序,所有参数可选\n同时指定x,y坐标则移动位置\n同时指定宽高则改变大小\n指定插入位置(句柄或_HWND前缀常量)则调整Z序
+!button.getPos() = 返回相对坐标,宽,高\nx,y,cx,cy=win.getPos(hwnd)
+?win.ui.ctrl.button  =!button. 
+
+end intellisense***/
+
+/***intellisense()
+?win.ui.ctrl.checkbox  =!checkbox.
+!checkbox.checked = 复选框是否选中状态
+!checkbox.hwnd = 控件句柄
+!checkbox.id = 控件ID
+!checkbox.parent = 父窗口
+!checkbox.parent.hwnd = 父窗口句柄
+!checkbox.hide = 控件是否隐藏
+!checkbox.disabled = 控件ID
+!checkbox.left = 左侧坐标
+!checkbox.right = 右侧坐标
+!checkbox.top = 顶部坐标
+!checkbox.bottom = 底部坐标
+!checkbox.redraw() = 刷新
+!checkbox.show(true__) = 显示控件
+!checkbox.rect = 控件区块位置(::RECT结构体)
+!checkbox.clientRect =  控件客户区块位置(::RECT结构体)
+!checkbox.font = 控件字体(::LOGFONT结构体)
+!checkbox.clientRect =  获取控件客户区块位置(::RECT结构体)
+!checkbox.theme = 外观主题,例如\nwinform.button.theme = "Explorer"\nwinform.button.theme = false
+!checkbox.modifyStyle(.(remove,add) = 如果指定第三个参数，则使用此参数调用::SetWidnowPos 
+!checkbox.modifyStyleEx(.(remove,add) = 如果指定第三个参数，则使用此参数调用::SetWidnowPos
+!checkbox.capture = 是否捕获全局鼠标消自息
+!checkbox.close() = 关闭控件窗口
+!checkbox.invalidate(__/*可选使用::RECT()对象指定客户区*/) = 使窗口绘图区无效
+!checkbox.invalidate(__/*可选使用::RECT()对象指定客户区*/,0) = 使窗口绘图区无效\n不刷新背景
+!checkbox.update() = 重绘invalidate函数指定的区块
+!checkbox.setFocus() = 设置焦点 
+!checkbox.setPos(.(x坐标,y坐标,宽,高,插入位置,参数) = 调整窗口位置或排序,所有参数可选\n同时指定x,y坐标则移动位置\n同时指定宽高则改变大小\n指定插入位置(句柄或_HWND前缀常量)则调整Z序
+!checkbox.getPos() = 返回相对坐标,宽,高\nx,y,cx,cy=win.getPos(hwnd)
+end intellisense***/
+
+
+/***intellisense()
+?win.ui.ctrl.radiobutton  =!radiobutton.
+!radiobutton.checked = 单选按钮否选中状态
+!radiobutton.hwnd = 控件句柄
+!radiobutton.id = 控件ID
+!radiobutton.parent = 父窗口
+!radiobutton.parent.hwnd = 父窗口句柄
+!radiobutton.hide = 控件是否隐藏
+!radiobutton.disabled = 控件ID
+!radiobutton.left = 左侧坐标
+!radiobutton.right = 右侧坐标
+!radiobutton.top = 顶部坐标
+!radiobutton.bottom = 底部坐标
+!radiobutton.redraw() = 刷新
+!radiobutton.show(true__) = 显示控件
+!radiobutton.rect = 控件区块位置(::RECT结构体)
+!radiobutton.clientRect =  控件客户区块位置(::RECT结构体)
+!radiobutton.font = 控件字体(::LOGFONT结构体)
+!radiobutton.clientRect =  获取控件客户区块位置(::RECT结构体)
+!radiobutton.theme = 外观主题,例如\nwinform.button.theme = "Explorer"\nwinform.button.theme = false
+!radiobutton.modifyStyle(.(remove,add) = 如果指定第三个参数，则使用此参数调用::SetWidnowPos 
+!radiobutton.modifyStyleEx(.(remove,add) = 如果指定第三个参数，则使用此参数调用::SetWidnowPos
+!radiobutton.capture = 是否捕获全局鼠标消自息
+!radiobutton.close() = 关闭控件窗
+!radiobutton.invalidate(__/*可选使用::RECT()对象指定客户区*/) = 使窗口绘图区无效
+!radiobutton.invalidate(__/*可选使用::RECT()对象指定客户区*/,0) = 使窗口绘图区无效\n不刷新背景
+!radiobutton.update() = 重绘invalidate函数指定的区块
+!radiobutton.setFocus() = 设置焦点 
+!radiobutton.setPos(.(x坐标,y坐标,宽,高,插入位置,参数) = 调整窗口位置或排序,所有参数可选\n同时指定x,y坐标则移动位置\n同时指定宽高则改变大小\n指定插入位置(句柄或_HWND前缀常量)则调整Z序
+!radiobutton.getPos() = 返回相对坐标,宽,高\nx,y,cx,cy=win.getPos(hwnd)
+end intellisense***/
+

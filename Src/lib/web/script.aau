@@ -1,0 +1,56 @@
+//微软脚本引擎
+//ScriptControl 对支持 ActiveX(TM) Script 的宿主 Script 引擎提供简单接口
+
+/************************************
+Author              : xAuto
+Time                : 5,20, 2010
+Version             : V 1.0.0
+Description         : Script 引擎接口
+************************************/
+
+import com;
+namespace web;
+
+script = class{
+				ctor(language = 'JavaScript'){
+					
+					this.msc = ..com.CreateObject("ScriptControl");
+					this.msc.UseSafeSubset = true;
+					this.msc.Language = language;
+					this.msc.AllowUI =true;
+
+				}  
+				@objmeta;
+}
+
+script.objmeta = {
+
+	_get = function(k){ 
+		return owner.msc[k]
+	}
+	
+	_set = function(k,v){ 
+		if(type(v)==type.table ) {
+			var obj = v._cdata; //是com对象吗
+			if( ! obj ) obj = ..com.ImplInterface(v); //不是就转换为com对象
+			owner.msc.AddObject(k,obj);  
+		}
+		else{
+			owner.msc[k] = v;
+		}
+		
+		
+	}
+	
+}
+
+/*intellisense()
+!vm.ExecuteStatement("__") = 执行代码，无返回值
+!vm.TimeOut = 脚本超时时间，以毫秒为单位
+!vm.UseSafeSubset = 脚本控件是否可以运行未被标记为“脚本安全”的组件
+!vm.Reset() = 重置脚本虚拟机，丢试所有脚本和对象
+!vm.AddCode("__") = 添加脚本代码
+!vm.Eval("__") = 执行并计算表达式代码，返回表达式的值
+!vm.ExecuteStatement("__") = 执行代码，无返回值
+?web.script  =  !vm.
+end intellisense*/

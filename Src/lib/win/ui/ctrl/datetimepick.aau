@@ -1,0 +1,61 @@
+namespace win.ui.ctrl; 
+import win.ui.ctrl.metaProperty;//导入控件属性元表支持
+
+ 
+class datetimepick{
+    ctor(parent,tvalue){ 
+    tvalue.cls  = "SysDateTimePick32";
+	if(tvalue.edge) tvalue.exstyle |= 0x200/*_WS_EX_CLIENTEDGE*/;	
+ 
+	this.pos2 = 0;
+    }
+	@metaProperty;
+}
+ 
+datetimepick.metaProperty = ..win.ui.ctrl.metaProperty(
+
+	time = {
+		_get = function(){ 
+			var re,tm = ::SendMessageByStruct(owner.hwnd, 0x1001/*_DTM_GETSYSTEMTIME*/,0,..time());
+     		return tm;
+		}
+		_set = function( v ){
+			assert( ..time.istime(v),"无效的time对象")
+		    ::SendMessageByStruct(owner.hwnd, 0x1002/*_DTM_SETSYSTEMTIME*/,0, v);
+		} 	
+	}
+)
+
+/***intellisense() 
+?win.ui.ctrl.datetimepick =!datetimepick.
+!datetimepick.time = 获取或设置时间
+!datetimepick.hwnd = 控件句柄
+!datetimepick.id = 控件ID
+!datetimepick.text = 控件文本
+!datetimepick.parent = 父窗口
+!datetimepick.parent.hwnd = 父窗口句柄
+!datetimepick.hide = 控件是否隐藏
+!datetimepick.disabled = 控件ID
+!datetimepick.left = 左侧坐标
+!datetimepick.right = 右侧坐标
+!datetimepick.top = 顶部坐标
+!datetimepick.bottom = 底部坐标
+!datetimepick.redraw() = 刷新
+!datetimepick.show(true__) = 显示控件
+!datetimepick.rect = 控件区块位置(::RECT结构体)
+!datetimepick.clientRect =  控件客户区块位置(::RECT结构体)
+!datetimepick.font = 控件字体(::LOGFONT结构体)
+!datetimepick.clientRect =  获取控件客户区块位置(::RECT结构体)
+!datetimepick.theme = 外观主题,例如\nwinform.button.theme = "Explorer"\nwinform.button.theme = false
+!datetimepick.modifyStyle(.(remove,add) = 如果指定第三个参数，则使用此参数调用::SetWidnowPos 
+!datetimepick.modifyStyleEx(.(remove,add) = 如果指定第三个参数，则使用此参数调用::SetWidnowPos
+!datetimepick.capture = 是否捕获全局鼠标消自息
+!datetimepick.close() = 关闭控件窗口
+!datetimepick.invalidate(__/*可选使用::RECT()对象指定客户区*/) = 使窗口绘图区无效
+!datetimepick.invalidate(__/*可选使用::RECT()对象指定客户区*/,0) = 使窗口绘图区无效\n不刷新背景
+!datetimepick.update() = 重绘invalidate函数指定的区块 
+!datetimepick.setFocus() = 设置焦点 
+!datetimepick.setPos(.(x坐标,y坐标,宽,高,插入位置,参数) = 调整窗口位置或排序,所有参数可选\n同时指定x,y坐标则移动位置\n同时指定宽高则改变大小\n指定插入位置(句柄或_HWND前缀常量)则调整Z序
+!datetimepick.getPos() = 返回相对坐标,宽,高\nx,y,cx,cy=win.getPos(hwnd)
+end intellisense***/
+

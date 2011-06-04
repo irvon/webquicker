@@ -1,0 +1,241 @@
+namespace win.ui.ctrl; 
+import win.ui.ctrl.metaProperty;//导入控件属性元表支持
+
+//TCM_FIRST 0x1300 // Tab control messages   
+class tab{
+    ctor(parent,tvalue){  
+    	tvalue.cls = "SysTabControl32";
+    	tvalue.style |= 0x40000000/*_WS_CHILD*/ | 0x4000000/*_WS_CLIPSIBLINGS*/ | 0x10000000/*_WS_VISIBLE*/ ;
+		if( tvalue.multiline ) tvalue.style |= 0x0200 //TCS_MULTILINE  
+ 		this._forms ={}
+ 		this._sellist ={};//记录用户切换当前页的历史
+    }
+    loadcode = function(path){  
+		var func = assert( loadcode(path) ); 
+		
+ 		this._form := ..win.form; 
+ 		var loopmessage_l  = ..win.loopMessage;
+ 		..win.loopMessage = function(){ } 
+    	..win.form=this[["add"]]; 
+    	var form = func(); 
+    	//恢复原来的功能
+		..win.loopMessage  = loopmessage_l;//恢复..win.loopMessage 
+		this.onchange(); 
+		return form;
+    } 
+    add = function(tform){ 
+    	assert(type(tform)==type.table,"参数必须是table对象");
+    	
+    	if(this._form)
+    		..win.form  = this._form; 
+    	    
+    	var tci = TCITEM();
+    	tci.pszText = tform.text;
+    	tci.pszText := "选项"
+    	tform.text = null;
+    	tform.parent= this ;
+    	tform.mode="child";
+    	tform.exmode="none";
+    	tform.border="none"
+    	tform.title=false; 
+    	var rc = this.clientRect
+    	if(!tform.right)
+    		tform.right = rc.right;
+    	if(!tform.bottom)
+    		tform.bottom = rc.bottom;	
+    	if( ! #(this._forms) ) tform.style =  0x10000000/*_WS_VISIBLE*/; 
+        	
+    	var wf = ..win.form(tform);
+    	var i = ..table.push(this._forms ,wf)-1;
+    	::SendMessageByStruct(this.hwnd ,4871/*TCM_INSERTITEM*/, i,tci); 
+    	if(!i){
+    		this.form = wf; 
+    		this.form.show()
+    	}
+       		
+       		
+    	return wf; 	
+    }
+    remove = function(i){
+    	assert( this._forms[i],"错误的索引")
+    	 
+    	if( this.form==this._forms[i]){ 
+    		this.form = null;
+    		..table.pop(this._sellist)
+    		if( #(this._sellist) ){
+    			var form = ..table.pop(this._sellist);
+    			for(i=1;#(this._forms);1){
+    				if( this._forms[i] == form ){
+    					this.selIndex = i;
+    					break ;
+    				}
+    			} 
+    		}
+    	}
+    	this._forms[i].close();
+    	..table.remove(this._forms ,i );
+    	::SendMessage(this.hwnd ,4872,topointer(i-1) )
+    	
+    	if(!this.selIndex)
+    			this.selIndex = #this._forms 
+    } 
+    removeAll = function(){  
+    	
+		for(i=#this._forms;1;-1){
+			this._forms[i].close(); 
+			..table.remove(this._forms ,i );
+		}  
+		this.form = null; 
+		..table.pop(this._sellist,#this._sellist)
+    	::SendMessage(this.hwnd ,4873 )  
+    } 
+    setItem = function(i,tci){
+    	::SendMessageByStruct(this.hwnd, 4870,i-1,tci);
+    	this.onchange()//解决窗口不刷新问题
+    }
+    getItem = function(i,tci){
+    	tci := TCITEM(); 
+    	::SendMessageByStruct(this.hwnd, 4869,i-1,tci);
+    	return tci;
+    }
+    getItemText = function(i,len=100){
+    	var tci = TCITEM(); 
+    	tci.pszText = ..raw.malloc(len)
+    	tci.cchTextMax = len; 
+    	return this.getItem(i,tci).pszText; 
+    }
+    setItemText = function(i,text){ 
+    	var tci = this.getItem(i-1);
+    	tci.pszText = text;
+    	tci.cchTextMax = #text;
+    	::SendMessageByStruct(this.hwnd, 4870,i-1,tci); 
+    	this.onchange()//解决窗口不刷新问题
+    } 
+    adjust = function(){
+    	if(! this.form )return;
+    	var rc = this.clientRect;    
+		::SendMessageByStruct(this.hwnd, 0x1300+40/*TCM_ADJUSTRECT*/,0,rc);
+		::MoveWindow(this.form.hwnd, rc.left-2, rc.top, rc.right - rc.left + 2 ,rc.bottom - rc.top  ,0 );  
+
+    }
+    _prenotify = function(id,code,nmdr){
+    	if(code==4294966745 /*_TCN_SELCHANGE*/ ){
+    		this.onchange();
+    	}
+    }
+    
+    onchange = function(){
+    	var sel = ::SendMessage(this.hwnd,0x1300+11) + 1;
+    	sel:=1; 
+    	for(i=1;#(this._forms);1){
+    		this._forms[i].show(false)
+    	}
+    	this.form = this._forms[sel];
+    	this.adjust();
+    	if(this.form)
+    		this.form.show(true) 
+    		
+    	..table.push( owner._sellist,this.form);
+    	if(#owner._sellist > 5){
+    		..table.remove(owner._sellist);
+    	}
+    }
+    
+    
+	@metaProperty;
+}
+tab.TCITEM = class {
+ INT mask = 0x0001|0x0002 ; //TCIF_TEXT | TCIF_IMAGE;
+ INT dwState;
+ INT dwStateMask;
+ string pszText;
+ int cchTextMax;
+ int iImage = -1;
+ int lParam;
+} 
+
+tab.metaProperty = ..win.ui.ctrl.metaProperty(
+
+	items = {
+		_get = function(){ 
+			return this._forms
+		} 
+	};
+	selIndex = {
+		_get = function(){ 
+			return ::SendMessageInt(owner.hwnd,0x1300+11,0,0) + 1;
+		}
+		_set = function( v ){
+			::SendMessageInt(owner.hwnd,0x1300+12,v-1,0,0 ) ;
+			owner.onchange();
+		} 	
+	};
+	items = {
+		_get = function(){ 
+			return owner._forms
+		}
+		_set = function( v ){
+			/*写入属性代码写在这里*/
+			..io.print( owner,v)
+		} 	
+	}
+	getItemRect=function(i){
+		var rcTab = ::RECT();
+		::SendMessageByStruct( owner.hwnd, 0x130A, i - 1, rcTab);
+		return rcTab;
+	}
+	fromPoint = function (x, y) { 
+		var rcTab
+		for ( i = 1; #owner.items; 1 ) {
+			var rcTab = owner.getItemRect(i)
+			if ( ::PtInRect(rcTab, x, y) ) {
+				return i;
+			}
+		} 
+	}
+	
+)
+
+
+/***intellisense()
+!tab.loadcode("__/*请输入aau文件路径*/") = 加载外部窗体文件
+!tab.hwnd = 控件句柄
+!tab.id = 控件ID
+!tab.parent = 父窗口
+!tab.parent.hwnd = 父窗口句柄
+!tab.disabled = 控件ID
+!tab.left = 左侧坐标
+!tab.right = 右侧坐标
+!tab.top = 顶部坐标
+!tab.bottom = 底部坐标 
+!tab.redraw() = 刷新
+!tab.show(true__) = 显示控件
+!tab.rect = 控件区块位置(::RECT结构体)
+!tab.clientRect =  控件客户区块位置(::RECT结构体)
+!tab.font = 控件字体(::LOGFONT结构体)
+!tab.clientRect =  获取控件客户区块位置(::RECT结构体)
+!tab.theme = 外观主题,例如\nwinform.button.theme = "Explorer"\nwinform.button.theme = false
+!tab.remove(__) = 参数为数值，移除指定索引的选项页
+!tab.removeAll() = 移除所有选项卡
+!tab.items = 返回子窗口列表，只读属性
+!tab.selIndex = 读取或设置当前选项索引\n起始索引为1
+!tab.add(__) = 请先用窗体设计器生成创建窗体代码，\n然后将创建窗体的win.form函数替换为此函数。\n函数参数即是win.form的参数(text参数表示选项卡标题)。
+!tab.modifyStyle(.(remove,add) = 如果指定第三个参数，则使用此参数调用::SetWidnowPos 
+!tab.modifyStyleEx(.(remove,add) = 如果指定第三个参数，则使用此参数调用::SetWidnowPos
+!tab.capture = 是否捕获全局鼠标消自息
+!tab.close() = 关闭控件窗口
+!tab.setItem(__/*索引*/,"") = 设置选项结构体
+!tab.getItem(__/*索引*/) = 读取选项结构体
+!tab.setItemText(__/*索引*/,"") = 设置选项卡标题
+!tab.getItemText(__/*索引*/) = 读取选项卡标题 
+!tab.getItemRect(__/*索引*/) = 读取选项卡区块位置
+!tab.invalidate(__/*可选使用::RECT()对象指定客户区*/) = 使窗口绘图区无效
+!tab.invalidate(__/*可选使用::RECT()对象指定客户区*/,0) = 使窗口绘图区无效\n不刷新背景
+!tab.update() = 重绘invalidate函数指定的区块
+!tab.setFocus() = 设置焦点 
+!tab.setPos(.(x坐标,y坐标,宽,高,插入位置,参数) = 调整窗口位置或排序,所有参数可选\n同时指定x,y坐标则移动位置\n同时指定宽高则改变大小\n指定插入位置(句柄或_HWND前缀常量)则调整Z序
+!tab.getPos() = 返回相对坐标,宽,高\nx,y,cx,cy=win.getPos(hwnd)
+!tab.form = !winform.
+win.ui.ctrl.tab.TCITEM() = 选项结构体
+?win.ui.ctrl.tab  =!tab.
+end intellisense***/

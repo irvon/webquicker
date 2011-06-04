@@ -1,0 +1,146 @@
+/************************************
+Author        : lujjjh
+Time          : 11/13/2010
+Version       : 1.1
+Description   : 数据加密
+************************************/
+
+namespace string.crypt;
+
+::Advapi32 := ..raw.loadDll("advapi32.dll");
+::CryptAcquireContext = ::Advapi32.api("CryptAcquireContextA", "int(pointer& hProv, int PszContainer, string pszProvider, int dwProvType, int dwFlags)");
+::CryptReleaseContext = ::Advapi32.api("CryptReleaseContext", "int(pointer hProv, int dwFlags)");
+::CryptCreateHash = ::Advapi32.api("CryptCreateHash", "int(pointer hProv, int Algid, int hKey, int dwFlags, pointer& phHash)");
+::CryptDestroyHash = ::Advapi32.api("CryptDestroyHash", "int(pointer hHash)");
+::CryptHashData = ::Advapi32.api("CryptHashData", "int(pointer hHash, string pbData, int dwDataLen, int dwFlags)");
+::CryptGetHashSize = ::Advapi32.api("CryptGetHashParam", "int(pointer hHash, int dwType, int& pbBuff, int& pbBuffLen, int dwFlags)");
+::CryptGetHashParam = ::Advapi32.api("CryptGetHashParam", "int(pointer hHash, int dwType, string& pbBuff, int& pbBuffLen, int dwFlags)");
+
+base = class {
+	ctor (nType = 0x3/*_ALG_SID_MD5*/) {
+		// 创建密钥
+		var ret, hProv;
+		ret, hProv = ::CryptAcquireContext(hProv, 0, "Microsoft Base Cryptographic Provider v1.0", 0x1/*_PROV_RSA_FULL*/, 0xF0000000/*_CRYPT_VERIFYCONTEXT*/ || 0x20/*_CRYPT_MACHINE_KEYSET*/);
+		if (!ret) {
+			ret, hProv = ::CryptAcquireContext(hProv, 0, "Microsoft Base Cryptographic Provider v1.0", 0x1/*_PROV_RSA_FULL*/, 0x8/*_CRYPT_NEWKEYSET*/ || 0x20/*_CRYPT_MACHINE_KEYSET*/);
+			if (!ret)
+				return null;
+		}
+		
+		// 创建散列
+		var hHash;
+		ret, hHash = ::CryptCreateHash(hProv, nType, 0, 0, hHash);
+		if (!ret) {
+			::CryptReleaseContext(hProv, 0);
+			return null;
+		}
+	}
+	release = function () {
+		if (hHash) {
+			::CryptDestroyHash(hHash);
+			hHash = null;
+		}
+		if (hProv) {
+			::CryptReleaseContext(hProv, 0);
+			hProv = null;
+		}
+	}
+	push = function (data) {
+		return ::CryptHashData(hHash, data, #data, 0) != 0;
+	}
+	getHash = function () {
+		// 取得散列大小
+		var ret, dwBufferSize;
+		ret, dwBufferSize = ::CryptGetHashSize(hHash, 0x4/*_HP_HASHSIZE*/, 4, 4, 0);
+		
+		// 取得散列值
+		var sHash;
+		ret, sHash = ::CryptGetHashParam(hHash, 0x2/*_HP_HASHVAL*/, dwBufferSize, dwBufferSize, 0);
+		
+		this.release();
+		
+		if (ret) {
+			var i;
+			var sTemp = "";
+			for(i = 1; dwBufferSize; 1)
+				sTemp ++= ..string.format("%02X", sHash[i]);
+			return sTemp;
+		}
+	}
+}
+
+md2 = class {
+	ctor (str) {
+		this = ..string.crypt.base(0x8001/*_CALG_MD2*/);
+		if (str) {
+			this.push(str);
+			return this.getHash();
+		}
+	}
+}
+md4 = class {
+	ctor (str) {
+		this = ..string.crypt.base(0x8002/*_CALG_MD4*/);
+		if (str) {
+			this.push(str);
+			return this.getHash();
+		}
+	}
+}
+md5 = class {
+	ctor (str) {
+		this = ..string.crypt.base(0x8003/*_CALG_MD5*/);
+		if (str) {
+			this.push(str);
+			return this.getHash();
+		}
+	}
+}
+sha1 = class {
+	ctor (str) {
+		this = ..string.crypt.base(0x8004/*_CALG_SHA1*/);
+		if (str) {
+			this.push(str);
+			return this.getHash();
+		}
+	}
+}
+
+/**intellisense()
+_PROV_RSA_FULL=@0x1/*_PROV_RSA_FULL*/
+_CRYPT_NEWKEYSET=@0x8/*_CRYPT_NEWKEYSET*/
+_ALG_TYPE_ANY=@0x0/*_ALG_TYPE_ANY*/
+_ALG_SID_MD2=@0x1/*_ALG_SID_MD2*/
+_ALG_SID_MD4=@0x2/*_ALG_SID_MD4*/
+_ALG_SID_MD5=@0x3/*_ALG_SID_MD5*/
+_ALG_SID_SHA1=@0x4/*_ALG_SID_SHA1*/
+_HP_HASHVAL=@0x2/*_HP_HASHVAL*/
+_HP_HASHSIZE=@0x4/*_HP_HASHSIZE*/
+_CRYPT_VERIFYCONTEXT=@0xF0000000/*_CRYPT_VERIFYCONTEXT*/
+_CRYPT_MACHINE_KEYSET=@0x20/*_CRYPT_MACHINE_KEYSET*/
+_ALG_CLASS_HASH=@0x8000/*_ALG_CLASS_HASH*/
+_CALG_MD2=@0x8001/*_CALG_MD2*/
+_CALG_MD4=@0x8002/*_CALG_MD4*/
+_CALG_MD5=@0x8003/*_CALG_MD5*/
+_CALG_SHA1=@0x8004/*_CALG_SHA1*/
+_PBM_SETPOS=@0x4B6/*_PBM_SETPOS*/
+
+crypt() = 加密数据
+crypt(__/*数据*/) = 加密数据，并返回加密后的结果
+crypt.push(__/*数据*/) = 向尾部加入数据
+crypt.getHash() = 取得最终的加密结果
+?string.crypt = crypt.
+?string.crypt.md2 = crypt.
+?string.crypt.md4 = crypt.
+?string.crypt.md5 = crypt.
+?string.crypt.sha1= crypt.
+string.crypt = 数据加密库
+string.crypt.md2() = MD2 加密
+string.crypt.md2(__/*数据*/) = MD2 加密，并返回加密结果
+string.crypt.md4() = MD4 加密
+string.crypt.md4(__/*数据*/) = MD4 加密，并返回加密结果
+string.crypt.md5() = MD5 加密
+string.crypt.md5(__/*数据*/) = MD5 加密，并返回加密结果
+string.crypt.sha1() = sha1 加密
+string.crypt.sha1(__/*数据*/) = sha1 加密，并返回加密结果
+end intellisense**/

@@ -1,0 +1,126 @@
+//控件管理
+import win.ole.image
+namespace win.ui.ctrl; 
+import win.ui.ctrl.common;
+import win.ui.ctrl.metaProperty;
+import win.ui.ctrl.button;
+
+//以下控件的库名与控件类名必须相同,发布时将从下面排除未使用的控件库
+/*OPT_IMPORT{{*/
+import win.ui.ctrl.static;
+import win.ui.ctrl.picturebox;	
+import win.ui.ctrl.edit;
+import win.ui.ctrl.richedit;
+import win.ui.ctrl.combobox;
+import win.ui.ctrl.listbox;
+import win.ui.ctrl.tab;
+import win.ui.ctrl.progress;
+import win.ui.ctrl.datetimepick;
+import win.ui.ctrl.hotkey;
+import win.ui.ctrl.listview;
+import win.ui.ctrl.checklist;
+import win.ui.ctrl.trackbar;
+import win.ui.ctrl.custom;	
+/*}}*/
+
+//控件工厂
+namespace factory{
+
+	create = function(tvalue){
+			//必须是子窗口
+		    tvalue.exstyle := 0;
+			tvalue.style := 0x40000000/*_WS_CHILD*/ 
+			tvalue.style |= 0x40000000/*_WS_CHILD*/ ;
+			
+			//获取通用的样式
+			if( tvalue.group ) tvalue.style |= 0x20000/*_WS_GROUP*/
+			if( tvalue.tabstop )tvalue.style |= 0x10000/*_WS_TABSTOP*/
+			if( !tvalue.hide )tvalue.style |= 0x10000000/*_WS_VISIBLE*/ ;   
+			if( tvalue.disabled )tvalue.style |= 0x8000000/*_WS_DISABLED*/
+			if( tvalue.hscroll )tvalue.style |= 0x100000/*_WS_HSCROLL*/
+	    	if( tvalue.vscroll )tvalue.style |= 0x200000/*_WS_VSCROLL*/
+	    	if( tvalue.border )tvalue.style |= 0x800000/*_WS_BORDER*/
+	    	if(tvalue.frame)tvalue.exstyle |= 0x1/*_WS_EX_DLGMODALFRAME*/
+			if(tvalue.acceptfiles)tvalue.exstyle |= 0x10/*_WS_EX_ACCEPTFILES*/
+		    if(tvalue.cp)tvalue.exstyle |= 0x10000/*_WS_EX_CONTROLPARENT*/
+			
+			tvalue.cls = ..string.lower( tvalue.cls )
+			tvalue.cls_  = tvalue.cls;//记录友好类名
+			
+			 //创建控件，并在每个构造函数中对tvalue进行一些预处理，例如修改radiobutton类名为button，visible等属性更换为样式 
+			 var cls = ..win.ui.ctrl[tvalue.cls];
+			 if(cls){
+			 	var obj = cls(tvalue.parent,tvalue);
+			 	obj.tparam = tvalue;
+			 	return obj;
+			 }
+			
+	}
+	
+	onCreateComplete = function(obj){
+			var tvalue = obj.tparam;
+			obj.tparam = null;
+			
+			//记录控件窗口原始大小(以计算自动调整的比例)
+			obj._defCtrlRect = ::RECT();  
+			obj._defCtrlRect.left = tvalue.left;
+			obj._defCtrlRect.top = tvalue.top;
+			obj._defCtrlRect.right = tvalue.right;
+			obj._defCtrlRect.bottom = tvalue.bottom;
+			
+			//去掉CreateWindowEx创建窗口时已经用到的属性			   	
+		    //tvalue.cls = null;
+		    tvalue.style = null;
+		    tvalue.left = null;
+		    tvalue.right = null;
+		    tvalue.top = null;
+		    tvalue.bottom = null;
+		    tvalue.hide = null;
+		    tvalue.disabled = null;
+		    tvalue.exstyle = null;
+		    
+		    //首先设置字体
+		    tvalue.font := LOGFONT(  );
+		    obj.font = tvalue.font;
+		    tvalue.font = null;
+		    
+		    //必须在设置其他属性以前调用初始化函数
+		    var oncreate = obj[["oncreate"]];
+		    if( oncreate ){ oncreate() }
+		    
+		    //初始化窗口的其他属性
+		    for(k,v in tvalue){
+		        obj[k] = v;
+		    }
+		    
+		    tvalue.cls = tvalue.cls_ //恢复友好类名
+	}
+
+}
+
+ /**intellisense()
+_NM_FIRST=@0x0/*_NM_FIRST*/
+_NM_LAST=@0xFFFFFF9D/*_NM_LAST*/
+_NM_OUTOFMEMORY=@0xFFFFFFFF/*_NM_OUTOFMEMORY*/
+_NM_CLICK=@0xFFFFFFFE/*_NM_CLICK*/
+_NM_DBLCLK=@0xFFFFFFFD/*_NM_DBLCLK*/
+_NM_RETURN=@0xFFFFFFFC/*_NM_RETURN*/
+_NM_RCLICK=@0xFFFFFFFB/*_NM_RCLICK*/
+_NM_RDBLCLK=@0xFFFFFFFA/*_NM_RDBLCLK*/
+_NM_SETFOCUS=@0xFFFFFFF9/*_NM_SETFOCUS*/
+_NM_KILLFOCUS=@0xFFFFFFF8/*_NM_KILLFOCUS*/
+_NM_CUSTOMDRAW=@0xFFFFFFF4/*_NM_CUSTOMDRAW*/
+_NM_HOVER=@0xFFFFFFF3/*_NM_HOVER*/
+_NM_NCHITTEST=@0xFFFFFFF2/*_NM_NCHITTEST*/
+_NM_KEYDOWN=@0xFFFFFFF1/*_NM_KEYDOWN*/
+_NM_RELEASEDCAPTURE=@0xFFFFFFF0/*_NM_RELEASEDCAPTURE*/
+_NM_SETCURSOR=@0xFFFFFFEF/*_NM_SETCURSOR*/
+_NM_CHAR=@0xFFFFFFEE/*_NM_CHAR*/
+_NM_TOOLTIPSCREATED=@0xFFFFFFED/*_NM_TOOLTIPSCREATED*/
+_NM_LDOWN=@0xFFFFFFEC/*_NM_LDOWN*/
+_NM_RDOWN=@0xFFFFFFEB/*_NM_RDOWN*/
+_NM_THEMECHANGED=@0xFFFFFFEA/*_NM_THEMECHANGED*/
+_NM_FONTCHANGED=@0xFFFFFFE9/*_NM_FONTCHANGED*/
+_NM_CUSTOMTEXT=@0xFFFFFFE8/*_NM_CUSTOMTEXT*/
+_NM_TVSTATEIMAGECHANGING=@0xFFFFFFE8/*_NM_TVSTATEIMAGECHANGING*/
+end intellisense**/

@@ -1,0 +1,49 @@
+//多账号登录器
+import web.form.util;
+import win.guid;
+import fsys;
+namespace web.form; 
+ 
+class sockpuppet{
+	ctor( ...){ 
+		..thread.lock("创建马甲登录器")
+		
+		//记录旧的设置
+		var web_reg = ..win.reg("HKEY_CURRENT_USER\SOFTWARE\MICROSOFT\WINDOWS\CURRENTVERSION\EXPLORER\User Shell Folders") 
+		var web_cookeis = web_reg.queryValue("Cookies")
+		var web_cache = web_reg.queryValue("Cache") 
+ 	　
+		//改变cookies目录
+		var cachePath = ..io.fullpath( "/sockpuppet/" + tostring(  ..win.guid.create() ) );
+		..fsys.createDir( cachePath )
+		web_reg.setSzValue("Cookies",cachePath )
+		web_reg.setSzValue("Cache",cachePath )  
+
+		..web.form.util.refreshOption() 
+		this = ..web.form( ... )  
+		
+		//还原cookies目录　
+		if( ! #web_cookeis )
+			clear()
+		else{
+			web_reg.setSzValue("Cookies",web_cookeis) 
+			web_reg.setSzValue("Cache",web_cache) 
+		}
+		..thread.unlock("创建马甲登录器")
+	}; 
+}
+
+namespace sockpuppet{
+	clear = function(){
+		var web_reg = ..win.reg("HKEY_CURRENT_USER\SOFTWARE\MICROSOFT\WINDOWS\CURRENTVERSION\EXPLORER\User Shell Folders") 
+		var web_cookeis = web_reg.queryValue("Cookies")
+		web_reg.delValue("Cookies")  
+		web_reg.delValue("Cache")  
+		web_reg.delValue("Window Title")  
+	}
+}
+ 
+/*intellisense(web.form) 
+sockpuppet = 替换web.form构造函数即可\n创建一个支持马甲登录器
+sockpuppet.clear() = 恢复默认
+end intellisense*/

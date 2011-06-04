@@ -1,0 +1,181 @@
+/* 
+* Copyright (C) 2010 Ecranesoft Lab
+* Author		carl
+* Version:      1.0
+* LastModified: 2011-5-15
+
+* 可以有效的控制线程数量
+* 等待线程执行完毕过程中,解决主窗体假死情况
+* 子线程向主线程使用队列消息传递方式
+*/
+
+namespace labs.thread.ex{}
+namespace thread.ex
+
+this=..thread.ex;
+
+//控制线程总数处理函数
+var push_thread=function(tid,value){
+	tab_thread[tid]=value;
+}
+
+//定义线程日志处理函数
+var threadinsert=function(str){
+	return ..table.insert(threadtablog,str); 
+}
+var threadpop = function( n ){
+	if(#threadtablog){
+ 		return ..table.pop(threadtablog,n );
+ 	} 
+}
+
+var max=function(){//当前线程总数
+	var i=0;
+	var tab_thread=..thread.get("tab_thread");
+	for(k,v in tab_thread){
+		if(v){i++;}
+	}
+	if(this[["count"]]){
+		this.count(i)
+	}
+	return i;
+}
+
+var threadwait=function(bAll,nowMax){//等待线程执行完
+	if(!bAll){		//等待一个线程执行完
+		while(true){
+			..win.delay(100);
+			if(max()<nowMax){return true; }
+		}
+	}else {			//等待所有线程执行完
+		while(true){
+			..win.delay(100);
+			if(!max()){return true; }
+		}
+	}
+}
+
+limit = function(tid,count = 10){//限制线程数目
+    if(!tid){
+    	threadwait(1);		//等待所有线程执行完
+    	..thread.set("tab_thread", {});
+    	return ; 
+    }
+	..thread.call("push_thread","owner",tid,true);	//线程开始标记
+	var nmax=max();		//当前线程总数
+	if( nmax>= count){
+		threadwait(0,count);			//等待一个线程执行完
+	}
+}
+
+insert=function(str){	//向共享table插入数据
+	return ..thread.call("threadinsert","owner",str);
+}
+
+pop=function(i){			//从共享table弹出数据
+	return ..thread.call("threadpop","owner",i);
+}
+
+exit=function(tid){//线程退出
+	..thread.call("push_thread","owner",tid,null);
+}
+
+start=function(){					//初始化
+/*
+	if(type(..thread.get("tab_thread"))==type.table
+		and type(..thread.get("push_thread")) ==type.function
+		and type(..thread.get("threadinsert")) ==type.function
+		and type(..thread.get("threadpop")) ==type.function
+		and type(..thread.get("threadtablog"))==type.table
+		){
+		return ; 						//防止重复设置
+	}
+*/
+	..thread.set("tab_thread", {});		//总线程
+	..thread.set("push_thread", push_thread);
+	..thread.set("threadinsert", threadinsert);
+	..thread.set("threadpop", threadpop);
+	..thread.set("threadtablog", {});				//消息传送table
+}
+/**intellisense()
+labs.thread.ex=多线程扩展库
+end intellisense**/
+
+/**intellisense(thread)
+ex=多线程扩展库
+ex.limit()= 等待所有线程执行完毕
+ex.limit(__/*线程ID*/,10)= 限制多线程数\n线程ID是必填参数,最大线程数\nthread.limit(tid,10)
+ex.start()=主线程初始化,只需调用一次,在主程线中调用,子线程里勿用
+ex.exit(__/*线程ID*/)=子线程退出\n线程ID是必填参数\n用于子线程中\n在子线程运行完毕后执行\n非常重要,记得执行
+ex.insert(__/*传送线程日志或消息*/)=向线程共享区table对像插入子线程运行日志或消息\n一般在子线程调用
+ex.pop(__/*读取日志消息数量*/)=从共享区table对像中弹出n个运行日志或消息数据\nthread.pop(1)//弹出1个数据\n一般在主程线调用
+ex.count = @.count=function(n){
+	..io.print("当前多线程总数:",n)
+}
+end intellisense**/
+
+//例子
+/****
+import win.ui;
+import labs.thread.ex;
+import win.ui.statusbar
+
+var winform = win.form(parent=...; text="AAuto Form";right=549;bottom=266 )
+winform.add( 
+button={ bottom=56;text="开始";left=442;top=23;font=LOGFONT( name="宋体";h=-12 );z=1;right=500;cls="button" };
+static={ bottom=43;color=0;right=136;left=28;top=10;font=LOGFONT( name="宋体";h=-21;out=3;family=2;clip=2;quality=1 );transparent=1;text="static";z=2;cls="static" };
+richedit={ bottom=220;right=487;left=33;multiline=1;top=80;font=LOGFONT( name="宋体";h=-12 );vscroll=1;z=3;text="";hscroll=1;edge=1;cls="richedit" };
+static2={ bottom=77;text="子线程运行日志";left=34;top=62;font=LOGFONT( name="宋体";h=-12 );transparent=1;z=4;right=137;cls="static" }
+)
+
+
+maxnum=10;									//设置最大线程数
+
+thread.ex.start();							//初始化主线程,此函数只能在主线程调用,只需调用一次即可,需在程序开头最早执行
+
+thread.ex.count=function(n){				//定义显示当前线程数
+	winform.static.text="线程数:" + n
+}
+
+tmid = winform.addtimer(					//用定时器处理队列里子线程传送的日志消息
+	500,
+	function(hwnd,msg,id,tick){
+		var str=thread.ex.pop(1)				//从队列里读取1条子线程消息
+		if(str){								//如果有消息,开始处理
+			winform.richedit.selText=str + '\n'
+		}
+	}
+);
+
+fun=function(n){							//子线程
+	import win;
+	import labs.thread.ex;					//记得线程里也要引用
+	
+	//子线程开始做任务
+	var tid=thread.getId()	
+	win.delay(n*1000)
+	if(n>3){
+		thread.ex.insert("子线程" + tid + "说:主线程老大,任务没完成,请指示")
+	}else {
+		thread.ex.insert("子线程" + tid + "说:主线程老大,任务圆满完成")
+	}
+	thread.ex.exit(tid);		//在子线程运行结束的地方调用,切记调用
+}
+
+winform.button.oncommand = function(id,event){
+	status.setText("程序开始")
+	for(i=1;20;1){
+		var n=math.random(1,5);
+		h,tid=thread.create(fun,n)	//创建子线程
+		thread.ex.limit(tid,maxnum);//限制最大线程,在每次创建子线程后执行
+	}
+	thread.ex.limit();				//等待所有子线程执行完
+	status.setText("所有任务已分配完成")
+}
+
+math.randomize(tonumber(time()))
+status=win.ui.statusbar(winform)
+winform.show() 
+win.loopMessage();
+
+****/
