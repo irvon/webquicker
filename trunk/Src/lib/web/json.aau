@@ -1,0 +1,212 @@
+/************************************
+Author		: namwonsta
+Time		: July 11, 2010
+Version		: V1.4.0.0001
+Description     : JSON.编码解码工具
+************************************/
+
+namespace web.json
+var push = ..table.push; 
+
+var scanWhiteSpace = function(s,pos){
+	if(!#s)return;
+	var whiteSpace = '\t \n\r';//空格不能放在字串起始处
+ 
+	for(i=1;#s){
+	    if( not ..string.indexAny(  whiteSpace , s[pos])  )
+	       break;
+	    pos ++;
+	}
+ 
+	return pos;
+}
+
+var scanComment = function(str,pos){ 
+	var endPos = ..string.find(str,"*/",pos+2);
+	assert(endPos != null,"Unterminated comment in string at "+pos);
+	return endPos+2;
+}
+
+var scanObject = function(str,pos){ 
+	var object = {}; //返回值
+	var len = #str;
+	var key,value; 
+	pos++;
+	
+	do{
+		pos = scanWhiteSpace(str,pos);
+		
+		select( str[pos]) {
+			case '}'#{
+		    	return object,pos+1;
+		    }
+			case  ','# {
+				pos = scanWhiteSpace(str,pos+1);	
+			} 
+		
+		}; 
+	    if(pos > len )
+	    	error("json格式错误 - 溢出",2)
+	    
+	    //是注释的话跳过
+	    if(str[pos] == '/'# && str[pos+1] == '*'# ){
+	    	pos = scanComment(str,pos);
+	    }
+	    else{	    
+	    	//扫描key
+			key,pos = decode(str,pos);
+			if(pos>len)
+				error("json格式错误 - 读取key时溢出",2)
+	    	 
+	    	pos = scanWhiteSpace(str,pos);	    
+	    	if( str[pos] != ':'#)
+	    		error("json格式错误 - 预期':',靠近:" + ..string.sub(str,pos,pos+10),2)
+	 
+	    	pos = scanWhiteSpace(str,pos+1);	 
+	    	value,pos = decode(str,pos);
+	    	object[key] = value;
+	    }
+	}while(true)
+}
+
+var ind=0;
+var scanArray = function(str,pos){ 
+	var array = {}; 
+	var strLen = #str; 	
+	pos ++; 
+	while(pos <= strLen ){
+		pos = scanWhiteSpace(str,pos); 
+		if( str[pos] == ','# ){
+			pos = scanWhiteSpace(str,pos+1);
+	    } 
+	    if( str[pos] == ']'# ){ 
+			return array,pos+1;
+		} 
+	    
+	    //是注释的话跳过
+	    if(str[pos] == '/'# && str[pos+1] == '*'# ){
+	    	pos = scanComment(str,pos);
+	    }else{
+	    	object,pos = decode(str,pos); 
+	    	push(array,object);
+	    }
+	} 
+	error("json格式错误 - 溢出",2)
+}
+ 
+
+var scanString = function(str,pos=1){ 
+	//..io.print( str,pos)
+	var startChar = str[pos + 0 /*非数字强制出错*/]; 
+	if(str[pos+1]==startChar)
+		return "",pos+2;
+	var endPos=pos+1;   
+	var chr;
+	for(i=pos+1;#str;1){ 
+		chr = str[i] 
+		if(chr=='\\'#){
+			i++;
+		}
+		elseif(chr==startChar){ 
+			break;
+		}
+		endPos = i;
+		
+	} 
+	return ..string.sub(str,pos+1,endPos),endPos+2;
+}
+
+
+var consts = {
+	["true"] = true;
+	["false"] = false; 
+	}; 
+var scanConstant = function(str,pos){ 
+	if(str[pos]==','#)
+		return null,pos;
+	
+	var nextStr = 	..string.sub(str,pos); 	
+	var n,l = tonumber( nextStr );
+    if(n!==null) return n,pos+l;
+	
+    
+    var token = ..string.match(nextStr,"^\a+")
+    if( token ){ 
+    	var const = consts[token];
+    	return const,pos+#token; 
+    }  
+    
+	error("json格式错误"+..string.sub(str,pos),3)
+}
+
+
+var toJsonString = function(v){
+    select(type(v)) {
+    	case type.table {
+        	return encode(v);
+    	} 
+    	case type.string{ 
+    		v = ..string.replace(v,"'","\\'");
+        	v = ..string.replace(v,"\z","\\0");
+        	return ..string.concat("'",v,"'"); 
+    	} 
+    	else{
+        	return  tostring(v)
+    	}
+    
+    }
+}
+
+
+encode = function(tab) {
+	if( type(tab) != type.table )
+		error("参数必须是table对象",2)
+		
+	var len = #tab;  
+	if(len){ 
+		var array = {}
+		for(i=1;len ){ 
+   			push( array, toJsonString( tab[i] ) );
+		} 
+		
+   		return ..string.concat("[",..string.join( array,"," ), "]");
+	}
+	
+	var map = {}
+	for(k,v in tab){
+   		if( (type(k)==type.string)  ){  
+   			push( map
+   				, ..string.concat(	toJsonString( k ) ,":",toJsonString( v ) )
+   				);
+   		}
+	} 
+	return  ..string.concat("{" ,..string.join( map,"," ) ,"}" );
+
+}
+
+
+decode = function(str,pos=1){
+	if(!str)
+		error("参数为空值",2)
+	pos = scanWhiteSpace(str,pos); 
+
+    select(str[pos]) {
+    	case '{'# //JSON对象 
+       		return scanObject(str,pos);
+    	case '['# //JSON数组 
+    		return scanArray(str,pos); 
+    	case '\"'#,'\''# 
+    		return scanString(str,pos);
+    	case '/'#
+    		if(str[pos+1] == '*'#)
+    		return scanComment(str,pos); 
+    }
+	  
+	return scanConstant(str,pos);
+}
+
+
+/**intellisense()
+web.json.decode(__/*json数据*/) = json数据转换为table
+web.json.encode(__/*table对象*/ = 转换为json数据
+end intellisense**/

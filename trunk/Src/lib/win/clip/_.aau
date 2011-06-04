@@ -1,0 +1,45 @@
+import win;
+
+namespace win.clip;
+
+OpenClipboard  = ::User32.api("OpenClipboard","int(int hwnd)" ) ;
+EmptyClipboard = User32.api("EmptyClipboard","int()" ) ;
+GetClipboardData = User32.api("GetClipboardData","pointer (int)" ) ;
+SetClipboardData = User32.api("SetClipboardData","int (int wFormat ,pointer hMem )" ) ;
+CloseClipboard = User32.api("CloseClipboard","int()" ) 
+
+read = function(){ 
+		if(!OpenClipboard(0))
+			return;	
+
+		var buffer =  GetClipboardData(1/*_CF_TEXT*/);
+		CloseClipboard(); 
+
+		if(!buffer)
+			return 0;
+ 
+		return ..raw.tostring( buffer );
+}
+write = function(str){ 
+		if(!OpenClipboard(0))
+			return;	
+			 
+		EmptyClipboard();
+		 
+		str = tostring(str);
+		var clipbuffer = ::GlobalAlloc(0x2000/*_GMEM_DDESHARE*/, #str + 1);
+        var buffer =  ::GlobalLock(clipbuffer);
+        
+        ::CopyMemory(buffer,str,#str); 
+		::GlobalUnlock(clipbuffer);
+
+		var hdl =  SetClipboardData(1/*_CF_TEXT*/,clipbuffer);
+		CloseClipboard();
+		return hdl;
+	 
+}
+
+/*intellisense(win.clip)
+read() = 读取剪贴板文本
+write(__) = 写入文本到剪贴板
+end intellisense*/

@@ -1,0 +1,51 @@
+//内码转换
+namespace  fsys.codepage
+
+reverseEndian = function(str){
+	m = ..raw.malloc(#str)
+	for(i=1;#str;2){
+		m[i] =str[i+1];
+		m[i+1] = str[i];
+	}
+	return ..raw.tostring(m);
+}
+
+
+
+load = function(path){
+	var file = ..io.open(path,"rb")
+	var str;
+	var byte = file.read(2)
+	 
+	if( byte[1] == 0xFE && byte[2] == 0xFF){ 
+		str = file.read(-1);
+		file.close()
+	 
+		return ..string.fromUnicode( reverseEndian(str) ); 
+
+	}
+	elseif( byte[1] == 0xFF && byte[2] == 0xFE) {
+		str = file.read(-1);
+		file.close()
+		return ..string.fromUnicode(str);
+	}
+	elseif( byte[1] == 0xEF  && byte[2] == 0xBB) {
+		var byte = file.read(1)
+		if(byte[1] == 0xBF ){
+			str = file.read(-1);
+			file.close()
+			return ..string.fromto(str);
+		}
+	}
+	
+	file.seek("set");
+	str = file.read(-1);
+	file.close()
+	return str;
+	 
+}
+
+/**intellisense(fsys.codepage)*/
+load(__/*文件路径*/) = 读取文件,\n可自动识别转换文件编码,\n支持:unicode,unicode big endian,utf8
+reverseEndian(__/*UNICODE字符串*/) = 大字节序(Big-Endian)与小字节(Little-Endian)的反向转换
+/*end intellisense**/

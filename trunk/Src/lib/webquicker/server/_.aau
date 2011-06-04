@@ -82,7 +82,6 @@ server = class {
 	
 	stop = function () {
 		if (this.hThread) {
-			..io.print("Stopping the service...");
 			..thread.set("thread_stop", true);
 			..thread.wait(this.hThread, 1000);
 			var t = ..time.tick();
@@ -93,7 +92,6 @@ server = class {
 			..raw.closehandle(this.hThread);
 			..wsock.closesocket(this.hSocket);
 			..wsock.close();
-			..io.print("Stopped.");
 			this.hThread = null;
 		}
 	}

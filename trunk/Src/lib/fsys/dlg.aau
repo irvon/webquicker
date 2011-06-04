@@ -1,0 +1,153 @@
+//公用对话框
+//windows公用对话框支持，例如打开文件对话框
+import win;
+namespace fsys.dlg   
+var dll = ..raw.loadDll("comdlg32.dll"); 
+ 
+OPENFILENAME = class{
+   INT structSize = 0;
+   INT hwndOwner  = 0;
+   pointer instance ;
+   string filter;
+   string customFilter;
+   INT maxCustFilter = 0;
+   INT filterIndex = 0;
+   string file = ..raw.malloc(260);
+   INT maxFile =  260-1;
+   string fileTitle;
+   INT maxFileTitle = 0;
+   string initialDir;
+   string title;
+   INT flags = 0;
+   WORD fileOffset = 0;
+   WORD fileExtension = 0;
+   string defExt;
+   pointer lCustData;
+   pointer lpfnHook;
+   string lpTemplateName;
+   pointer pvReserved;
+   INT dwReserved = 0;
+   INT flagsEx = 0; 
+} 
+var getOpenFileName = dll.api("GetOpenFileNameA","int(struct&)" )
+var getSaveFileName = dll.api("GetSaveFileNameA","int(struct&)" )
+
+var openFileDlg = function(api,title="打开文件",filter,dir="/", parenthwnd,flag){
+
+	//=== Struct used by the standard file dialog
+	ofn = OPENFILENAME(); 
+	ofn.structSize = ..raw.sizeof(ofn);  
+	ofn.initialDir =  ..io.exist(dir) 
+	
+	
+	//====== Try to set the hook
+	//ofn.lpfnHook = MyHook(hWnd, ID_FILE_OPEN, 0, 0);
+	ofn.lpfnHook = null; //MyHook(hWnd, ID_FILE_OPEN, 0, 0);
+	
+	if( type(filter) == type.table ) begin
+		..table.push( filter,"");//为了让后面多一个\0
+		ofn.filter = ..string.join( filter,'\0' ) 
+	end;
+	else if(type(filter) == type.string)
+	    ofn.filter = ..string.replace( filter,'|','\0');
+	else{
+	    ofn.filter = '所有文件\0*.*\0\0'; 
+	}   
+	ofn.defExt = ..string.match(ofn.filter,"\z.+?\.(\w+)"); 
+	
+	//====== The filters string index (begins with 1)
+	ofn.filterIndex = 1;
+	
+	//====== Dialog caption
+	ofn.title = title ;
+	ofn.maxFileTitle = #(ofn.title);
+	
+	//====== Dialog style (only in Win2K)
+	ofn.flags = 0x80000 /*_OFN_EXPLORER*/;
+	if(flag)ofn.flags |= flag;
+	
+	ofn.hwndOwner = parenthwnd;
+	
+	//====== Create and open the dialog (retuns 0 on failure)
+	if( api(ofn)  )
+    	return ofn.file ;
+	else
+	   return null//assert( false, ..lasterr() )
+
+}
+
+/*intellisense(fsys.dlg)*/  
+open  = function(filter="所有文件|*.*||",title="打开文件",dir, parenthwnd,flag){
+	return openFileDlg(getOpenFileName,title,filter,dir, parenthwnd,flag)
+}
+
+save  = function(filter="所有文件|*.*||",title="保存文件",dir, parenthwnd,flag){
+	return openFileDlg(getSaveFileName,title,filter,dir, parenthwnd,flag)
+}   
+/*end intellisense*/
+
+var SHITEMID = class {
+	WORD cb;
+	BYTE abID[ 1 ];
+}
+
+var BROWSEINFO = class {
+	int hwndOwner;
+	pointer pidlRoot;
+	string pszDisplayName; // Return display name of item selected.
+	string lpszTitle = "请选择目录"; // text to go in the banner over the tree.
+	INT ulFlags = 0x00000004 | 0x00000040 | 0x00000010 | 0x00000001 | 0x00000080 ; //BIF_STATUSTEXT | BIF_NEWDIALOGSTYLE | BIF_EDITBOX | BIF_RETURNONLYFSDIRS | BIF_BROWSEINCLUDEURLS; // Flags that control the return stuff
+	pointer lpfn;
+	int lParam; // extra info that's passed back in callbacks
+	int iImage; // output var: where to return the Image index.
+}
+
+::Shell32 := ..raw.loadDll("Shell32.dll");  
+SHBrowseForFolder := Shell32.api("SHBrowseForFolderA","pointer(struct lpbi)");
+SHGetPathFromIDList  := Shell32.api("SHGetPathFromIDListA","int(pointer pidl,string & str)"); 
+
+::Ole32 := ..raw.loadDll("Ole32.dll")
+CoTaskMemFree := Ole32.api("CoTaskMemFree","void(pointer hMem)" ) 
+
+opendir = function(dir,parenthwnd){
+    dir = ..io.exist(dir)  
+
+	var browseCallbackProc = function( hwnd, uMsg, lp, pData) 
+	{  
+		select(uMsg) {
+			case 1 //BFFM_INITIALIZED
+			{
+				::SendMessage(hwnd,0x0400+102/*BFFM_SETSELECTIONA*/,topointer(1),dir);
+			}
+			case 2 //BFFM_SELCHANGED
+			{
+				var re,path = SHGetPathFromIDList( lp,260) 
+				if(re)
+					::SendMessage(hwnd,0x0400+100/*BFFM_SETSTATUSTEXT*/,null,path);
+			
+			} 
+		}
+	} 
+ 
+
+	bi = BROWSEINFO();
+	bi.pszDisplayName = ..raw.malloc(260);
+	bi.hwndOwner = parenthwnd;
+	bi.lpfn = ..raw.tostdcall( browseCallbackProc ,"int(int,int,pointer,pointer)");
+	
+	var pid = SHBrowseForFolder(bi);
+	var re,path = SHGetPathFromIDList( pid,260);
+	bi.lpfn = null;
+	
+	if(re){
+	 	path = ..string.str(path)
+	 	CoTaskMemFree(pid)
+	} 
+	return re && path; 
+}
+
+/*intellisense(fsys.dlg)
+opendir(.(目录__,父窗口) = 打开目录浏览对话框
+opendir(.(目录__) = 打开目录浏览对话框
+opendir(.() = 打开目录浏览对话框
+end intellisense*/

@@ -1,0 +1,57 @@
+
+import web.form.util;
+namespace web; 
+ 
+var IID_IHTMLDocument = win.guid.fromString("{626FC520-A41E-11CF-A731-00A0C9082637}")
+class access{
+
+	ctor( hwnd )begin
+		 
+		this._form = {hwnd = hwnd ;web = this}
+		
+		var err; 
+		try{ 
+			var doc = getAccessibleObject(hwnd,IID_IHTMLDocument) 
+	 		this._object = ..web.form.util.queryBrowser(doc.parentWindow)
+	 		this._browser = this._object; 
+		}
+		catch(e){ 
+			err = e; 
+		}
+		if(!this._browser)
+			return null, err;
+			
+		try{
+			var sink, cookie =..com.Connect(this._browser, this );
+		}
+	end; 
+	 
+	@metaProperty;
+}
+ 
+namespace access { 
+
+	var dll = ..raw.loadDll("OLEACC.DLL");
+	ObjectFromLresult := dll.api("ObjectFromLresult","int(int lResult,struct riid,int wParam,pointer &ppvObject)" ); 
+	WM_HTML_GETOBJECT = ::RegisterWindowMessage("WM_HTML_GETOBJECT"); 
+	getAccessibleObject = function (hwnd,iid){ 
+		var re, res = ::SendMessageTimeout (hwnd, WM_HTML_GETOBJECT, 0,0, 0x2/*_SMTO_ABORTIFHUNG*/,1000,0)  
+		var re,unknown = ObjectFromLresult(res, iid , 0 );
+		//将一个 C指针转换为com对象
+		return ..com.QueryObject( unknown )
+	}
+
+	metaProperty =  ..web.form.metaProperty  
+}
+ 
+//自动提示
+/******intellisense( ) 
+web.access = 外部浏览器支持库\n支持所有使用系统置浏览控件的窗口,包括所有IE内核浏览器.
+web.access( __/*网页窗口句柄*/ ) = 连接外部浏览器 
+?web.access = !wb.  
+end intellisense******/
+
+
+ 
+
+ 

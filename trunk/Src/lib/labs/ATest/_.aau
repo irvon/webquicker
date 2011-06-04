@@ -1,0 +1,382 @@
+/************************************
+Author		: namwonsta
+Time		: June 13, 2010
+Version		: V0.0.8.0001
+Description     : AAuto ≤‚ ‘øÚº‹
+************************************/
+
+namespace labs.ATest
+
+import win;
+import web.json;
+
+var push  = ..table.push;
+path = ..io.splitpath(owner);
+
+var dblEq = function(var1,var2){return var1 == var2;}
+//var tripleEq = function(var1,var2){ return var1 === var2;}
+
+var eqPredicates = {
+	string = dblEq;
+	number = dblEq;
+	boolean = dblEq
+}
+
+var typeToString = function(types){
+	select(types) {
+	case type.number 
+		return "_number_";
+	case type.string
+		return "_string_";
+	case type.boolean
+		return "_boolean_";	
+	}
+}
+
+var comKeyProc = function(b){
+	if(type(owner) == type(b)) {
+		return owner<b;
+	}elseif(type(owner) == type.number && type(b) == type.string){
+		return true;
+	}elseif(type(owner) == type.string && type(b) == type.number){
+		return false;
+	}
+}
+
+var displayStringForValue = function(aVar) {
+	if(type(aVar) == type.table)
+    	var result = '<' + ..table.tostring(aVar) + '>';
+    else
+    	var result = '<'+aVar+'>';
+    if (!(type(aVar) === type.null)){
+        result += ' (' + type(aVar) + ')';
+    }
+    return result;
+}
+
+var hexToAscii = function(tab){
+	for(i=1;#tab)
+		tab[i] = ..string.format("%c",tonumber(tab[i],16));
+	return tab;	
+}
+
+var unicodeTextToAscii = function(a,b){
+	var t = {b;a};
+	return ..string.fromUnicode(..string.join(hexToAscii(t)));
+}
+
+failure = class{
+	ctor(comment,message){
+		this.isATestFailure = true;
+		this.comment = {};
+		this.message = {};
+		//this.stackTrace = getStackTrace();
+		push(this.comment,comment);
+		push(this.message,message);
+	}
+}
+
+findTest = function(tab){
+	forTest = {};
+	if(type(tab) == type.table){
+		for(k,v in tab){
+			if(..string.left(k,5) == "test_"){
+				forTest[k] = v;
+			}
+		}
+	}
+	return forTest;
+}
+
+findAll = function(tab2){
+	allele = {};
+	if(type(tab2) == type.table){
+		for(k,v in tab2){
+			allele[k] = v;
+		}		
+	}
+	return allele;
+}
+
+getPutTabFromJson = function(jsonStr,testedUnit){
+	var jsonTab = ..web.json.decode(jsonStr);
+	var casenums = jsonTab[testedUnit].casenums;
+	var declarations = jsonTab[testedUnit].declarations;
+	var assertFunc = jsonTab[testedUnit].assertFunc;
+	var input = {};
+	var output = {};
+	
+	for(j=1;casenums){
+		var cs = "case"+j;
+		var k = testedUnit+"\"+cs;
+		input[k] = jsonTab[testedUnit][cs].input;
+		output[k] = jsonTab[testedUnit][cs].output;
+	}
+
+	return input,output,casenums,declarations,assertFunc;
+}
+
+unpack = function(tab){
+	for(i=1;#tab){
+		if(type(tab[i]) == type.string){
+			if(tab[i] === "null"){
+				tab[i] = null;
+			}else{			
+				tab[i] = ..string.replace(tab[i],"<\\u>(<\x\x>)(<\x\x>)",unicodeTextToAscii);		
+
+				if(tab[i][1] === '@'#)
+					tab[i] = loadcode(..string.format("return '%s'",..string.trimleft(tab[i],"@")))();			
+			}
+		}
+	}
+	return ..table.unpack(tab);
+}
+
+doTest = function(jsonStr,ns,testedUnit,assertObj,fMsg){
+	var input,output,casenums,declarations,assertFunc = getPutTabFromJson(jsonStr,testedUnit);
+	var unit = ..string.split(testedUnit,'-')[1];
+	
+	for(i=1;casenums){
+		var k = testedUnit + "\case" + i;
+		result = {ns[unit](unpack(input[k]))};
+		assertObj[assertFunc](result,output[k],fMsg);
+	}
+	
+}
+
+testAssert = class{
+	ctor(){
+		this.comment = {};
+		this.message = {};
+	}
+	
+	getTestResults = function(){
+		var msgNums = #(this.comment);
+		var msg = {};
+	
+		if( msgNums>0){
+			for(i=1;msgNums){
+				push(msg,this.comment[i]+'\r\n'+this.message[i]);
+			}	
+		}else{
+			push(msg,"Pass,Green Bar");
+		}
+		
+		return ..table.unpack(msg);
+	}
+	
+	validateArgs = function(argsTab,validNums){
+		if(!(#argsTab == validNums || ( #argsTab == validNums+1 && type(argsTab[3]) == type.string || argsTab[3] == null)))
+			return "Incorrect arguments passed to assert function";
+	}
+	
+	_assert = function(comment,bValue,fMsg){
+		if(! bValue){
+			push(this.comment,comment);
+			push(this.message,fMsg);
+		}else{
+			return ture;
+		}
+	}
+	
+	assertNotUndefined = function(aVar,comment){
+		this.validateArgs({aVar;comment},1);
+		this._assert(comment,type(aVar) !== type.null,'Expected not to be null');
+	}
+	
+	assertEquals = function(var1,var2,comment){
+		this.validateArgs({var1;var2;comment},2);
+		this._assert(comment,var1 === var2,'Expected '+tostring(var2)+' but was '+tostring(var1));	
+	}
+
+	assertObjectEquals = function(var1,var2,comment){
+		this.validateArgs({var1;var2;comment},2);
+
+		if(var1 === var2)
+			return;
+			
+		isEqual = false;
+		var typeOfVar1 = type(var1);
+		var typeOfVar2 = type(var2);
+		
+		if(typeOfVar1 == typeOfVar2){
+			eqFn = eqPredicates[typeOfVar1];
+			if(eqFn){
+				isEqual = eqFn(var1,var2);
+			}else{
+				var kv1,kv2,vv1,vv2 = {},{},{},{};
+				var bStr = true;
+				for( k,v in var1 ){
+					bStr = bStr && (type(k) == type.string);
+					push(kv1,k);
+					push(vv1,v);
+				}
+				for( k,v in var2 ){
+					push(kv2,k);
+					push(vv2,v);
+				}
+
+				if(bStr){
+					..table.sort(kv1,comKeyProc);
+					..table.sort(kv2,comKeyProc);
+				
+					key1 = ..string.concat(..table.unpack(kv1));
+					key2 = ..string.concat(..table.unpack(kv2));
+					
+					if(key1 != key2){
+						return this._assert(comment,false,'Expected keys "' + key1 + '" but found "' + key2 + '"');
+					}
+					for(k,v in kv1){
+							this.assertObjectEquals(var1[v], var2[v],comment + ' found nested ' + typeOfVar1 + '@' + tostring(v) + '\n');		
+					}
+					isEqual = true;
+				}else{
+					var n1 = #kv1;
+					var n2 = #kv2;
+					if(n1 == n2){
+						for(i=1;n1){
+							for(j=1;n2){
+								var v1 = vv1[i];
+								var v2 = vv2[j];
+								if(type(v1) != type.table){
+									if(v1 === v2){
+										vv1[i] = typeToString(type(v1))++i;
+										vv2[j] = typeToString(type(v2))++i;
+										break;
+									}
+								}elseif(type(v1) == type.table){
+									if(type(v2) == type.table){
+										this.assertObjectEquals(v1, v2,comment + ' found nested ' + typeOfVar1 + '@' + tostring(v1) + '\n');
+										vv1[i] = "table"+i;
+										vv2[j] = "table"+i;
+										break;
+									}
+								}
+							}
+						}
+						for(i=1;n1){
+							var v1 = vv1[i];
+							var v2 = vv2[i];
+							if(type(v1) != type.string || type(v1) == type.string && v1[1] != '_'#)
+								vv1[i] = tostring(v1);
+							if(type(v2) != type.string || type(v2) == type.string && v2[1] != '_'#)
+								vv2[i] = tostring(v2);
+						}
+						..table.sort(vv1);
+						..table.sort(vv2);
+					
+						value1 = ..string.concat(..table.unpack(vv1));
+						value2 = ..string.concat(..table.unpack(vv2));
+						
+						if(value1 != value2){
+							return this._assert(comment,false,'Expected table has values "' + ..table.tostring(var2) + '", but found "' + ..table.tostring(var1) + '"');
+						}
+						isEqual = true;
+					}else{
+						isEqual = false;
+					}
+				}
+			}
+		}
+		
+		this._assert(comment,isEqual,'Expected ' + displayStringForValue(var2) + ' but was ' + displayStringForValue(var1));
+	}
+	
+	assertArrayEquals = function(tab1,tab2,comment){
+		this.validateArgs({tab1;tab2;comment},2);
+		if(type(tab1) != type.table || type(tab2) != type.table)
+			return "Non-array passed to assertArrayEquals";
+		//..io.print(..table.tostring(tab1),..table.tostring(tab2));
+		this.assertObjectEquals(tab1,tab2,comment);
+	}
+	
+	assertHashEquals = function(tab1,tab2,comment){
+		this.validateArgs({tab1;tab2;comment},2);
+		if(type(tab1) != type.table || type(tab2) != type.table)
+			return "Non-Hash passed to assertHasEquals";	
+			
+		for(k in tab1){
+			this.assertNotUndefined(tab2[k],"Expected hash had key " + k + " that was not found");
+			if(type(tab1[k]) == type.table && type(tab2[k]) == type.table)
+				this.assertObjectEquals(tab1[k],tab2[k],comment);
+			else
+				this.assertEquals(tab1[k],tab2[k],"Value for key " + k + " mismatch - expected = " + tostring(tab2[k]) + ", actual = " + tostring(tab1[k]));
+		}
+			
+		for(k in tab2){
+			this.assertNotUndefined(tab1[k],"Actual hash had key " + k + " that was not expected");
+		}
+	}
+	
+	assertJsonEquals = function(json1,json2,comment){
+		this.validateArgs({json1;json2;comment},2);
+		if(type(json1) != type.string || type(json2) != type.string)
+			return "Non-string passed to assertJsonEquals";
+		
+		var tab1 =..web.json.decode(json1);
+		var tab2 =..web.json.decode(json2);
+
+		return this.assertObjectEquals(tab1,tab2,comment);
+	}
+}
+
+testSuit = class{
+	ctor(){
+		this.isTestSuit = true;
+		this.testUnits = {};
+		this.index = 0;
+	}
+	
+	addTestSuits = function(basePath,t){
+		if(type(t) == type.null || t === 1) t="local";
+		if(t === 0 || t === false ) t = "remote";
+		var tab = {};
+
+		if(type(basePath) == type.string){
+			tab[1] = basePath;
+		}
+		if(	type(basePath) == type.table){
+			tab = basePath;
+		}			
+		for(i=1;#tab){
+			if(t=="local"){
+				..win.enumFiles(tab[i],"*.aau",
+				function(dir,filename){
+					if(filename && (filename[1] != 0)){
+						push(this.testUnits,dir+"\"+filename);
+					}
+				} )
+			}elseif(t=="remote"){
+				push(this.testUnits,tab[i]);
+			}else{
+				assert(false,"≤Œ ˝÷µ¥ÌŒÛ£°");
+			}
+		}
+	}
+	
+	addTestUnit = function(fileName){
+		if(type(fileName) == type.string){
+			push(this.testUnits,fileName);
+			this.index++;
+		}
+	}
+	
+	containsTestUnits = function(){
+		return ..rget(-1,..table.range(this.testUnits)) > 0;
+	}
+	
+	nextUnit = function(){
+		this.index++;
+		return this.testUnits[this.index];
+	}
+	
+	hasMoreUnit = function(){
+		return this.index < #this.testUnits;
+	}
+	
+	clone = function(){
+		var clone = this;
+		clone.testUnits = this.testUnits;
+		return clone;
+	} 
+}

@@ -1,0 +1,29 @@
+
+namespace time.timer{
+	var tk = 0;
+	
+	start = function(){
+		tk = ..time.tick()
+	}
+	
+	tick = function(){
+		return ..time.tick() - tk; 
+	}
+	
+	test = function( loop,f ){
+		var t = 0;
+		for(i=1;loop;1){
+			start()
+			f();
+			t += tick();
+		}
+		return t \ loop
+	}
+	
+}
+
+/**intellisense(time.timer)
+start() = 开始计时
+tick() = 计时
+test = @.test( 5, \n	function(){\n		for(i=1;1000){\n			__/*输入测试代码*/\n		} \n	}\n)
+end intellisense**/

@@ -1,0 +1,95 @@
+namespace web;
+
+var fileMime  = {
+	[".htm"] = "text/html";
+	[".html"] = "text/html";
+	[".xml"] = "text/xml";
+	[".xhtml"] = "application/xhtml+xml";
+	[".js"] = "application/x-javascript";
+	[".txt"] = "text/plain";　
+	[".rtf"] = "application/rtf";
+	[".pdf"] = "application/pdf";
+	[".ppt"] = "application/vnd.ms-powerpoint　";　　
+	[".doc"] = "application/msword";　
+	[".bmp"] = "application/x-MS-bmp";　
+	[".png"] = "image/png";　
+	[".gif"] = "image/gif";　
+	[".jpeg"] = "image/jpeg";　
+	[".jpg"] = "image/jpeg";　
+	[".jpe"] = "image/jpeg";
+	[".jpz"] = "image/jpeg";
+	[".au"] = "audio/basic";　
+	[".avi"] = "video/x-msvideo";
+	[".mid"] = "audio/midi";
+	[".midi"] = "audio/x-midi";　
+	[".ra"] = "audio/x-pn-realaudio";
+	[".ram"] = "audio/x-pn-realaudio";
+	[".mpg"] = "video/mpeg";
+	[".mpeg"] = "video/mpeg";
+	[".mp3"] = "audio/x-mpeg";
+	[".mov"] = "video/quicktime";
+	[".mp4"] = "video/mp4";
+	[".wmv"] = "video/x-ms-wmv";
+	[".zip"] = "application/zip";
+	[".gz"] = "application/x-gzip";
+	[".tar"] = "application/x-tar";　
+	[".taz"] = "application/x-tar";
+	[".rar"] = "application/x-rar-compressed";
+	[".dll"] = "application/octet-stream";
+	[".exe"] = "application/octet-stream";
+} 
+
+ 
+
+var addfield = function(formdata,boundary,name,value){
+	var str = ..string.format( '--%s\r\n
+Content-Disposition: form-data; name="%s"\r\n
+\r\n
+%s\r\n', boundary,name,value)
+	..table.push( formdata,str ); 
+}
+
+..math.randomize() 
+
+class uploadData {
+	ctor( field,fname, file,mime ){
+		var formdata = {}
+		var boundary = ..string.random( ..math.random(15,25) );
+		var fileData = ..string.load(file);
+		var tfield = ..string.split(field,"&")
+		var nv;
+		if(!fileData)
+			error("读取文件失败!",2)
+			
+		for(i=1;#tfield;1){
+			nv = ..string.split(tfield[i],"=");
+			addfield( formdata,boundary,nv[1],nv[2] );
+		}
+		
+		var tpath = ..io.splitpath(file);
+		if(!mime){
+			mime = fileMime[tpath.ext];
+			mime := "application/octet-stream";
+		}
+		
+		..table.push( formdata
+			, ..string.format( '--%s\r\n
+Content-Disposition: form-data; name="%s"; filename="%s"\r\n
+Content-Type: %s\r\n
+\r\n
+%s\r\n
+--%s--\r\n',boundary,fname,file,mime,fileData,boundary)
+		);
+		
+		this.data = ..string.join( formdata );
+		this.header = ..string.format('\r\nContent-Type: multipart/form-data; boundary=%s',boundary )  
+
+	} 
+}
+
+/**intellisense()
+web.uploadData("","","\__/*上传文件路径*/") = 创建上传表单数据\n参数一以&分隔多个键值对字段值\n参数二指定上传文件字段名\n参数三指定上传文件
+!uploadData.data = 上传表示数据
+!uploadData.header = 上传HTTP请求头
+?web.uploadData = !uploadData.
+end intellisense**/

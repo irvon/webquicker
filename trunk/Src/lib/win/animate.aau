@@ -1,0 +1,109 @@
+//动画窗口
+/************************************
+Author      : wudijushi(crane指点修改)
+Date        : 2011.01.06
+************************************/
+//窗体动画
+
+namespace win.animate;
+AnimateWindow = ::User32.api( "AnimateWindow", "bool(INT hwnd, INT dwTime, INT dwFlags )");
+
+var flag = { 
+    show = { 
+        393221;//左上至右下 滑行效果 
+        393222;//右上至左下 滑行效果 
+        393225;//左下至右上 滑行效果 
+        393226;//右下至左上 滑行效果 
+        393217;//左至右 滑行效果 
+        393218;//右至左 滑行效果 
+        393220;//上至下 滑行效果 
+        393224;//下至上 滑行效果 
+        393232;//中心向四周 滑行效果 
+        655365;//左上至右下 淡入淡出 
+        655366;//右上至左下 淡入淡出 
+        655369;//左下至右上 淡入淡出 
+        655370;//右下至左上 淡入淡出 
+        655361;//左至右 淡入淡出 
+        655362;//右至左 淡入淡出 
+        655364;//上至下 淡入淡出 
+        655368;//下至上 淡入淡出 
+        655376 //中心向四周 淡入淡出 
+    };
+    hide = { 
+        327685;//左上至右下 滑行效果 
+        327686;//右上至左下 滑行效果 
+        327689;//左下至右上 滑行效果 
+        327690;//右下至左上 滑行效果 
+        327681;//左至右 滑行效果 
+        327682;//右至左 滑行效果 
+        327684;//上至下 滑行效果 
+        327688;//下至上 滑行效果 
+        327696;//四周向中心 滑行效果 
+        589829;//左上至右下 淡入淡出 
+        589830;//右上至左下 淡入淡出 
+        589833;//左下至右上 淡入淡出 
+        589834;//右下至左上 淡入淡出 
+        589825;//左至右 淡入淡出 
+        589826;//右至左 淡入淡出 
+        589828;//上至下 淡入淡出 
+        589832;//下至上 淡入淡出 
+        589840 //四周向中心 淡入淡出 
+    }
+}
+          
+..math.randomize( ..time.tick() );
+animate = function( flagTable,hwnd,flag,tick=200){
+    if( hwnd ){
+        flag := ..math.random(-18,-1);
+        if(flag<0){
+            flag = flagTable[ ..math.abs(flag)/* % (#flagTable+1)*/ ]
+        } 
+        return AnimateWindow( hwnd, tick, flag );
+    }
+}
+
+hide = function( ... ){
+    return animate( flag.hide,...)
+}
+
+show = function( ... ){
+    return animate( flag.show,...)
+}
+
+/*intellisense(win.animate)
+show(.(窗口句柄,动画效果,动画时间 ) = 第三参数可选，默认为200ms\n第二参数可选，默认随机取-1到-12间的预定义效果\n效果可以以_AW_前缀常量组合自定义
+hide(.(窗口句柄,动画效果,动画时间 ) = 第三参数可选，默认为200ms\n第二参数可选，默认随机取-1到-12间的预定义效果\n效果也可以以_AW_前缀常量组合自定义
+end intellisense*/
+
+/**intellisense()
+lt_slide=@-1/*lt_slide*/
+rt_slide=@-2/*rt_slide*/
+lb_slide=@-3/*lb_slide*/
+rb_slide=@-4/*rb_slide*/
+l_slide=@-5/*l_slide*/
+r_slide=@-6/*r_slide*/
+t_slide=@-7/*t_slide*/
+b_slide=@-8/*b_slide*/
+center_slide=@-9/*center_slide*/
+lt_fade=@-10/*lt_fade*/
+rt_fade=@-11/*rt_fade*/
+lb_fade=@-12/*lb_fade*/
+rb_fade=@-13/*rb_fade*/
+l_fade=@-14/*l_fade*/
+r_fade=@-15/*r_fade*/
+t_fade=@-16/*t_fade*/
+b_fade=@-17/*b_fade*/
+center_fade=@-18/*center_fade*/
+end intellisense**/
+
+/**intellisense()
+_AW_HOR_POSITIVE=@0x1/*_AW_HOR_POSITIVE*/
+_AW_HOR_NEGATIVE=@0x2/*_AW_HOR_NEGATIVE*/
+_AW_VER_POSITIVE=@0x4/*_AW_VER_POSITIVE*/
+_AW_VER_NEGATIVE=@0x8/*_AW_VER_NEGATIVE*/
+_AW_CENTER=@0x10/*_AW_CENTER*/
+_AW_HIDE=@0x10000/*_AW_HIDE*/
+_AW_ACTIVATE=@0x20000/*_AW_ACTIVATE*/
+_AW_SLIDE=@0x40000/*_AW_SLIDE*/
+_AW_BLEND=@0x80000/*_AW_BLEND*/
+end intellisense**/

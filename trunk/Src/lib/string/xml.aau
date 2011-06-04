@@ -1,0 +1,87 @@
+//¼òµ¥xml½âÎö
+namespace string;
+
+var push = ..table.push;
+var pop = ..table.pop;
+var sub = sub;
+var trim = trim;
+
+var function parseProperties (ele, str) { 
+	replace(
+		str, 
+		"(\w+)\s*=\s*([""'])(.+?)\2", 
+		function (w, a, b){
+    		ele[w] = b
+		} 
+	) 
+}
+
+var function pushElemet(parent,ele){
+	parent[ele.tag] = parent[ele.tag] or {};
+	push( parent[ele.tag],ele );
+	push( parent,ele );
+} 
+
+class xml{
+	ctor( xmlstr ){
+		var nodeStack = {};
+		var topNode = this;
+		push(nodeStack, topNode);  
+ 	
+		var strfrom = 1;  
+		var tagfrom,tagto //find pos
+				,slash_front ,tag,properties, slash_back = ..string.find(xmlstr, "\<([\/\?]?)([\w:]+)(.*?)([\/\?]?)\>", strfrom);
+				
+		while(tagfrom) { 
+		
+			var innerText = sub(xmlstr, strfrom, tagfrom-1)
+			var innerText = trim(innerText);
+			if( #innerText ){ 
+				push(topNode, innerText) 
+				topNode.innerText = innerText
+			}
+			
+			if #slash_back   {  
+				//empty ele e.g. <tag />
+				var tab = {  tag=tag; empty_ele=1}
+				parseProperties( tab,properties);
+				pushElemet(topNode,tab)
+			}
+			elseif slash_front  != "/"  {  
+			 	// open tag e.g. <tag prop="value" >
+				topNode = { tag=tag }
+				parseProperties( topNode,properties);
+				push(nodeStack, topNode)   // new level
+			}
+			else {
+				// close tag  e.g. </tag>
+				var ele = ..table.pop(nodeStack)  // pop top
+				topNode = nodeStack[#nodeStack]
+			 	
+				if #nodeStack < 1 {
+					error("nothing to close with "+ tag)
+				}
+				if ele.tag != tag {
+					error("trying to close <" + ele.tag + "> with </" + tag + ">")
+				}
+				pushElemet(topNode, ele)
+			}
+			
+			strfrom = tagto+1
+			tagfrom,tagto
+				,slash_front ,tag,properties, slash_back = ..string.find(xmlstr, "\<([\/\?]?)([\w:]+)(.*?)([\/\?]?)\>" , strfrom);
+		}
+		
+		var innerText = sub(xmlstr, strfrom)
+		var innerText = trim(innerText);
+		if( #innerText ){  
+			push(nodeStack[#nodeStack], text)
+		}
+	  	
+		if #nodeStack> 1 {
+			error("unclosed " + nodeStack[#nodeStack].tag)
+		} 
+	}; 
+}
+
+ 

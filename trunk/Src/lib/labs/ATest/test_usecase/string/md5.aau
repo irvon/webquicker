@@ -1,0 +1,21 @@
+namespace testStringMd5
+
+import labs.ATest;
+import string.md5;
+
+..io.open();
+//加载测试框架内核
+string@ = labs.ATest;
+
+//加载测试用例
+flname = string@.path.dir+"test_usecase\string\md5.json";
+jsonStr = ..string.load(flname);
+
+//调用testAssert对象
+testAssert = string@.testAssert();
+
+//运行测试
+string@.doTest(jsonStr,string,"md5",testAssert,"assertArrayEquals found errors");
+
+//测试结果
+..io.print(testAssert.getTestResults());

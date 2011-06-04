@@ -1,0 +1,113 @@
+import inet
+import fsys;
+namespace inet  
+ 
+ftp = class {
+
+	ctor(server,user,password,port = 21,pasv,agent = "Mozilla/4.0", proxy,proxyBypass="",flags=0 ){ 
+	
+	    if( #proxy ){
+	   		this.session = ::InternetOpen(agent,0x3/*_INTERNET_OPEN_TYPE_PROXY*/,proxy,proxyBypass,flags);	
+	    }
+	    else{ 
+	    	this.session = ::InternetOpen(agent,(!proxy)? 0x1/*_INTERNET_OPEN_TYPE_DIRECT*/:0x0/*_INTERNET_OPEN_TYPE_PRECONFIG*/,null,null,flags);
+	    } 
+	    if(!this.session)
+			error("inet.ftp初始化失败",2) 
+	     
+    	  
+    	//连接
+    	this.conn = ::InternetConnect(this.session 
+    		,server
+    		,port 
+    		,user
+    		,password
+    		, 1
+    		, pasv?0x8000000:0 //是否被动模式
+    		, 0); 
+    		
+		if( not this.conn )
+			return null,"连接FTP服务器失败"; 
+    }; 
+    
+ 	close = function(){ 
+ 		if(this.conn)
+ 			::InternetCloseHandle(this.conn);
+ 			
+    	if(this.session)
+    		::InternetCloseHandle(this.session);
+    }; 
+    
+    upload=function(local,todir){
+   		return FtpPutFile(this.conn,..io.fullpath(local),todir,0,0,1,0)  
+    }; 
+    
+    download=function(local,remote){
+    	return FtpGetFile(this.conn,remote,..io.fullpath(local),0,0x80000000/*_INTERNET_FLAG_RELOAD*/,0,0) 
+    };
+       
+    eachDir = function(dir,p="*.*"){
+    	dir = ..string.replace(dir,"\\","/");
+     	if( not ..string.endWith( dir,"/") )
+     		dir = dir + "/";  
+     	
+     	FtpSetCurrentDirectory(this.conn,dir)
+     	var hfile;
+     	var findData = ..fsys.WIN32_FIND_DATA() 
+     	var freeItor = function(){  
+   			if(hfile){ 
+   				::InternetCloseHandle(hfile); 
+   				hfile = null;
+   			}
+   		}   
+   		var gcFile;
+   		
+     	return function(){
+     	
+     		if(hfile){
+     			if(!InternetFindNextFile(gcFile,findData))
+     				return;
+     		}
+     		else{
+     			hfile = FtpFindFirstFile(this.conn,p,findData,0,0);
+     			if(!hfile)
+     				return; 
+     			gcFile = ..gcdata( _gc = freeItor ;_topointer =  hfile )
+     			
+     		}
+     	  
+     		filename =..string.str( findData.cFileName );
+     		if( findData.dwFileAttributes & 0x10/*_FILE_ATTRIBUTE_DIRECTORY*/ )
+     			return filename, ,findData
+     		else
+     			return null,filename,findData 
+     	},freeItor
+     	
+    }	
+ }
+ 
+namespace ftp{
+	FtpGetFile = ::Wininet.api("FtpGetFile","int(POINTER hConnect,string lpszRemoteFile,string lpszNewFile,int fFailIfExists,INT dwFlagsAndAttributes,INT dwFlags,INT dwContext)")
+	FtpPutFile = Wininet.api("FtpPutFile","INT(POINTER hConnect, string lpszLocalFile,string lpszNewRemoteFile, INT dwFlags,INT dwContext)")
+	FtpDeleteFile  = Wininet.api("FtpDeleteFileA","int(POINTER hConnect,string lpszFileName)")
+	FtpRenameFile = Wininet.api("FtpRenameFile","int(POINTER hConnect,string lpszExisting,string lpszNew)")
+	FtpFindFirstFile = Wininet.api("FtpFindFirstFileA","pointer(POINTER hFtpSession,string lpszSearchFile,struct& lpFindFileData,int dwFlags,int dwContent)");
+	InternetFindNextFile = ::Wininet.api("InternetFindNextFileA","int(pointer hFind,struct& lpvFindData)");
+	FtpSetCurrentDirectory = ::Wininet.api("FtpSetCurrentDirectoryA","int(POINTER hFtpSession,string lpszDirectory)");
+	FtpGetCurrentDirectory = ::Wininet.api("FtpGetCurrentDirectoryA","Boolean(POINTER hConnect,string lpszCurrentDirectory,int lpdwCurrentDirectory)");
+
+}
+ 
+
+/*intellisense()
+inet.ftp(.(主机,用户名,密码,端口号,是否被动模式,UserAgent,代理,绕过代理,选项) = 除第一个参数以外,其他参数可选
+!ftp.eachDir = @for(dir,file,findData in ??.eachDir("\")){
+	 __
+}
+!ftp.download(.(loadfile,remotefile) = 下载
+!ftp.upload(.(formfile,todir) = 上传
+!ftp.close() = 关闭连接
+?inet.ftp = !ftp.
+end intellisense*/
+
+ 

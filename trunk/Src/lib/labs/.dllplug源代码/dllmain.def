@@ -1,0 +1,5 @@
+LIBRARY "dllplug"
+
+EXPORTS
+
+AAutoApiTest @1 

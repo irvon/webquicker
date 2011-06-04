@@ -1,0 +1,83 @@
+//屏幕右下通知窗口
+/*
+根据 drbdrb 的代码修改
+http://www.ecranesoft.com/bbs/showtopic-8799.aspx
+*/
+namespace win.util; 
+
+//可以把下面的类放到库里面
+class popup {
+
+    ctor(winform,delay=10000,waitSwitch=true ,xr=25){
+        this = winform; 
+        
+        //得到窗体大小
+        var rc = this.rect;
+        rc.width = rc.right-rc.left;
+        rc.height = rc.bottom-rc.top;
+        
+        //计算稳动到屏幕右下角的区块
+        rc.right = ::GetSystemMetrics(0x10/*_SM_CXFULLSCREEN*/);
+        rc.bottom = ::GetSystemMetrics(0x11/*_SM_CYFULLSCREEN*/) + ::GetSystemMetrics(0x4/*_SM_CYCAPTION窗口标题的高度*/) ;
+        rc.right -= xr; 
+        rc.left = rc.right -  rc.width;
+        
+        //计算移动间距
+        rc.topmost = rc.bottom -  rc.height; 
+        rc.top = rc.bottom;
+        this.rect = rc;
+        
+ 
+        
+        var tickstart;
+        var remaintime;
+        var remaintime_pre;
+        var tmid = this.addtimer(
+            1/*毫秒*/,
+            function(hwnd,msg,id,tick){//定时执行代码
+            	if( tickstart ){
+            		var span = ..time.tick()-tickstart
+            		if( span > delay) {  
+            			if( (!waitSwitch) ||  ..win.getForeground() != this.hwnd){
+            				this.killtimer(id)//移除此定时器 
+            				this.close();
+            			}
+            		}
+            		else {
+            			remaintime = ..math.floor( (delay - span) /1000 )
+            			if( remaintime != remaintime_pre ){
+            				remaintime_pre = remaintime;
+            				if(this[["countdown"]])
+            					this.countdown( remaintime )
+            			}
+            		}
+            		return;
+            	}
+            
+                if( rc.top <= rc.topmost  ) { 
+                	tickstart = ..time.tick() 
+                	if(delay==-1)
+                		this.killtimer(id)//移除此定时器
+                    return;
+                }
+                else{
+                	rc.top -= 10; 
+                	this.rect = rc 
+                }
+            }
+        );
+        ..win.setTopmost(this.hwnd)
+        this.show(); 
+    }
+}
+
+/**intellisense()
+win.util.popup(__/*输入winform对象*/) = 创建一个通知窗口,在屏幕右下角弹出
+win.util.popup(__/*输入winform对象*/,10000) = 创建一个通知窗口,在屏幕右下角弹出\n参数2为延时,以毫秒为单位
+win.util.popup(__/*输入winform对象*/,10000,false) = 创建一个通知窗口,在屏幕右下角弹出\n参数2为延时,以毫秒为单位\n超时自动关闭
+!utilpopup.countdown = @.countdown=function(remaintime){
+	..io.print("剩余时间：",remaintime  + "秒")
+}
+
+?win.util.popup = !utilpopup.
+end intellisense**/

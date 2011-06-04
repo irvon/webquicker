@@ -1,0 +1,832 @@
+//界面支持库
+import win.ui.ctrl;  
+import win.gdi; 
+
+namespace win   
+namespace ui{
+	_forms = {}  //记录所有win.form对象,创建则添加此表,销毁则从表中移除 
+	 
+	getForm = function(hwnd){
+		var winform = _forms[hwnd];
+		while(!winform){
+			hwnd = ..win.getParent(hwnd);
+			if(!hwnd) 
+				return null; 
+			winform =  _forms[hwnd]; 
+		} 
+		
+		return winform
+	}
+	 
+	/**intellisense(win.ui)
+	_forms = 记录所有winform对象,键作为句柄
+	getForm(__/*控件或窗口句柄*/) = 返回指向或包含句柄指向窗口的form对象 
+	end intellisense**/
+	
+}
+ 
+
+//下面两个函数是保护成员，禁止外部直接调用
+var SetTimer = ::User32.api("SetTimer","INT(int hWnd,INT nIDEvent,INT uElapse,pointer lpTimerFunc)");
+var KillTimer = ::User32.api("KillTimer","int(int hWnd,INT nIDEvent)");
+
+var cyborder = ::GetSystemMetrics( 0x6/*_SM_CYBORDER*/ );
+var cxborder = ::GetSystemMetrics( 0x5/*_SM_CXBORDER*/ );
+var cycaption = ::GetSystemMetrics( 0x4/*_SM_CYCAPTION*/  ); 
+
+::Shell32 := ..raw.loadDll("Shell32")
+var DragQueryFile = ::Shell32.api("DragQueryFile","INT(int hDrop,  INT iFile,str& lpszFile,INT cch)");
+var DragFinish =  ::Shell32.api("DragFinish","INT(int hDrop)");
+
+
+//接收拖放文件名
+getDropFile = function(wparam){ 
+    var re = DragQueryFile(wparam,0xFFFFFFFF,0x104/*_MAX_PATH*/,0x104/*_MAX_PATH*/);
+    var file = {}; 
+    for(i=1;re)
+        re,file[i] = DragQueryFile(wparam,i-1,0x104/*_MAX_PATH*/,0x104/*_MAX_PATH*/);
+    DragFinish( wparam );
+    return file;
+}
+/**intellisense(win)
+getDropFile(wparam) = 用于消息回调函数中获取拖放文件列表
+end intellisense**/
+
+try{
+	uxTheme = ..raw.loadDll("UxTheme.dll")
+	SetWindowTheme = uxTheme.api("SetWindowTheme","void(int hwnd,string pszSubAppName,string pszSubIdList)" )
+	//SetWindowTheme(控件句柄," "," ")
+}
+catch(e){
+} 
+
+ui.NMHDR = class {
+ int hwndFrom;
+ INT idFrom;
+ INT code; // NM_ code
+}
+var NMHDR_L = ui.NMHDR;
+/**intellisense()
+!nmhdl.hwndFrom = 发送消息的控件句柄
+!nmhdl.idFrom = 发送消息的控件ID
+!nmhdl.code = 通知代码
+?.ui.NMHDR = !nmhdl.
+end intellisense**/
+
+
+var io = ..io;
+var raw = ..raw;
+var hInstance = ::GetModuleHandle(null);
+class form{  
+    //form类构造函数
+	ctor( tparam ) begin   
+	    this.hInstance = hInstance;
+		var wndclass  = ::WNDCLASSEX();   
+		tparam.cls := "AAU_FORM"
+		tparam.cls = ..string.format("%s[TID:%d]",tparam.cls , ..thread.getId() ) 
+		if(not ::GetClassInfo(this.hInstance,tparam.cls,wndclass) ) {  
+			//创建一个新的窗口类
+			wndclass  = ::WNDCLASSEX(); 
+			wndclass.hInstance= hInstance ; 
+			wndclass.lpszClassName=tparam.cls; 
+			wndclass.hIcon =   ::LoadIcon(this.hInstance, topointer(130) );
+			wndclass.hIconSm =   ::LoadIcon(this.hInstance, topointer(130) );
+			wndclass.hCursor =  ::LoadCursor(null, topointer(0x7F00/*_IDC_ARROW*/) );
+			wndclass.hbrBackground =  topointer(0xF/*_COLOR_BTNFACE*/ + 1) //::GetStockObject(_HOLLOW_BRUSH); 
+			wndclass.lpfnWndProc = ::DefWindowProc;  
+		 
+			assert(  RegisterClassEx( wndclass) ,   ..lasterr()  ) 
+		}
+		
+		var cyborder = CY_BORDER
+		var cxborder = CX_BORDER
+		var cycaption = CY_CAPTION
+		
+		//生成窗口扩展样式
+    	//---------------------------------
+    	
+    	//初始化为组合扩展样式
+    	tparam.exstyle := 0 
+		select( tparam.exmode ) { 
+			case "toolwindow" { 
+				tparam.exstyle |= 0x80/*_WS_EX_TOOLWINDOW*/;
+			}
+			case "none" {
+				tparam.exstyle |= 0;
+			} 
+			else {
+				tparam.exstyle |= 0x40000/*_WS_EX_APPWINDOW*/;
+			} 
+		
+		}
+		
+		if(tparam.acceptfiles) 
+		     tparam.exstyle |= 0x10/*_WS_EX_ACCEPTFILES*/
+		     
+		if(tparam.frame)
+		     tparam.exstyle |= 0x1/*_WS_EX_DLGMODALFRAME*/
+		     
+		if(tparam.cp)
+		     tparam.exstyle |= 0x10000/*_WS_EX_CONTROLPARENT*/ 
+         
+        if(tparam.topmost) 
+        	tparam.exstyle |= 0x8/*_WS_EX_TOPMOST*/
+	 
+		//生成窗口样式
+    	//---------------------------------
+    	
+    	//初始化为组合样式
+    	tparam.style := 0
+		select( tparam.mode ) { 
+			case "child" {
+				tparam.style |= 0x40000000/*_WS_CHILD*/  
+			}
+			case "popup" {
+				tparam.style |= 0x80000000/*_WS_POPUP*/ ; 
+			}  
+			else  {
+				tparam.style |= 0x0/*_WS_OVERLAPPED*/;
+			}
+		
+		}  
+		
+		//如果窗口标题为空，则自动禁用标题栏，系统菜单
+		if(! (#(tparam.text)) ){
+        	tparam.title = false;
+        	//tparam.sysmenu = false;
+        }
+        
+        if(tparam.title === false ) //无标题栏时不能应用_WS_OVERLAPPED样式
+        	tparam.style := 0x80000000/*_WS_POPUP*/
+      
+        //边框样式
+        
+        //WS_CAPTION 实际上是 _WS_BORDER 与 _WS_DLGFRAME组合而成
+        var deltitle =  ~0xC00000/*_WS_CAPTION*/;
+		select( tparam.border ) { 
+			case "resizable" {
+				tparam.style |= 0x40000/*_WS_SIZEBOX*/;
+			}
+			case "thin" {
+				tparam.style |= 0x800000/*_WS_BORDER*/;
+				deltitle = ~0x400000/*_WS_DLGFRAME*/; 
+			}
+			case "none" {
+				//无边框窗口
+				cyborder = 0;
+				cxborder = 0;
+				
+				//取消默认的 0x0/*_WS_OVERLAPPED* 样式
+				tparam.style :=   0x80000000/*_WS_POPUP*/
+				tparam.style &= ~ 0x800000/*_WS_BORDER*/;
+				 
+				tparam.title = false;
+			} 
+			else {
+				tparam.style |= 0x400000/*_WS_DLGFRAME*/;
+				deltitle = ~0x800000/*_WS_BORDER*/; 
+			}
+		
+		}   
+		 
+		if(tparam.title===false) {
+			tparam.style &= deltitle //避免去掉标题栏时覆盖了边框设置
+        	cycaption = 0; //如果没有标题栏,则要去掉标题栏的高度 
+        }	
+        else{ 
+        	tparam.style |= 0xC00000/*_WS_CAPTION*/ 
+        } 
+		
+ 
+        if(tparam.max!==false) 
+        	tparam.style |= 0x10000/*_WS_MAXIMIZEBOX*/ 
+        else
+        	tparam.style &= ~0x10000/*_WS_MAXIMIZEBOX*/ 
+        	
+        if(tparam.min!==false) 
+        	tparam.style |= 0x20000/*_WS_MINIMIZEBOX*/ 
+        else
+        	tparam.style &= ~0x20000/*_WS_MINIMIZEBOX*/ 
+        	 
+        	 
+        if(tparam.sysmenu!==false) {
+        	tparam.style |= 0x80000/*_WS_SYSMENU*/
+        }
+        else {
+        	tparam.style &= ~0x80000/*_WS_SYSMENU*/
+        } 
+        
+        if( tparam.maxmize  ){
+    		tparam.style |= 0x1000000/*_WS_MAXIMIZE*/;
+    	}
+    	if( tparam.minmize  ){
+    		tparam.style |= 0x20000000/*_WS_MINIMIZE*/
+    	}
+    	
+    	
+        this@ = metaProperty
+         //如果用户设置了背景图片
+        this.image = tparam.image 
+ 
+ 	
+	
+		
+		if( ( type( tparam.parent) == type.table )   ){
+			this.parent = tparam.parent;
+			tparam.parent = tparam.parent.hwnd; 
+		} 
+		
+		if( type( tparam.parent ) != type.number )
+		    tparam.parent = 0;  
+		
+		if(tparam.left===null) 
+			tparam.left= -1;
+        if(tparam.top===null) 
+        	tparam.top= -1; 
+        
+		//计算窗体宽、高
+		var cx = tparam.right - tparam.left + (cxborder*2) ;
+		var cy = tparam.bottom - tparam.top + (cyborder*2) + cycaption;
+		
+		var x = tparam.left ;
+		//如果为负数，计算默认坐标
+		if(x==-1){
+			var sx = ::GetSystemMetrics(0x0/*_SM_CXSCREEN*/) ;
+			if(sx>cx)
+				x = (sx-cx)/2;
+			else
+				x = 0; //0x80000000/*_CW_USEDEFAULT*/
+		}
+		
+		var y = tparam.top ;
+		//如果为负数，计算默认坐标
+		if(y==-1){
+			var sy = ::GetSystemMetrics(0x1/*_SM_CYSCREEN*/ ) ;
+			if(sy>cy)
+				y = (sy-cy)/2;
+			else
+				y = 0; //0x80000000/*_CW_USEDEFAULT*/
+		}
+			
+		//创建主窗口
+		this.hwnd = ::CreateWindowEx(
+		tparam.exstyle,
+		tparam.cls,
+		tparam.text,
+		tparam.style , //窗口风格
+		x,//x
+		y,//y
+		cx,//w
+		cy,//h
+		tparam.parent,//parent
+		0,//menu
+		hInstance,
+		null//param
+		);
+		 
+		this.font = LOGFONT(  );//设置字体
+		
+		//记录窗口大小 
+		this._defDlgRect = ::RECT();//记录主窗体大小 
+		this._defDlgRect.left = tparam.left- cxborder ;
+		this._defDlgRect.top = tparam.top-( cyborder + cycaption) ;
+		this._defDlgRect.right = tparam.right + cxborder;
+		this._defDlgRect.bottom = tparam.bottom + cyborder;
+		
+		//不要清除设置图片时设定的默认背景色
+		if( tparam.bgcolor)
+        	this[["bgcolor"]] = tparam.bgcolor;
+        	
+        this[["scroll"]] = tparam.scroll;
+		
+		this._wndproc_c = raw.tostdcall( _wndproc,   ..win.CALLBACK.WNDPROC,this/*设为owner对象*/)   
+		::SetWindowPointer(this.hwnd,0xFFFFFFFC/*_GWL_WNDPROC*/,  this._wndproc_c);  
+		
+		this.maxmize =  tparam.maxmize;
+		this.minmize =  tparam.minmize 
+				 
+        ..win.ui._forms[this.hwnd] = this;
+        
+		..win.closed = null;//通知所有消息函数，窗体正在运行
+	end;
+    _ctrlId = {};//控件ID映射关系
+    _ctrlHwnd = {};//控件句柄映射关系 
+    add = function( tparam ) begin
+        var zorder = {}
+        for name,tvalue in  tparam{
+            for(i=1;#zorder;1){
+                 if( zorder[i][2].z > tvalue.z )
+                 { 
+                     ..table.insert( zorder,{name;tvalue} , i) 
+                     continue 2;
+                 }
+            } 
+            ..table.push( zorder,{name;tvalue} );
+            
+        }
+ 
+		for(i=#zorder;1;-1 ){  
+		    var name = zorder[i][1];
+		    var tvalue = zorder[i][2];  
+		    
+			 //创建控件
+			tvalue.parent = this;//自定义控件要用到
+			ctrl = ..win.ui.ctrl.factory.create(tvalue);
+			if(!ctrl)continue ;
+			this[name] = ctrl;
+			
+			//对控件添加一些默认的属性
+		    ctrl.id =  ..table.push( this._ctrlId, ctrl ) ; 
+		    ctrl.parent = this; 
+	         
+	        //创建控件窗口  
+	        if(	!ctrl.hwnd ){
+	        	//如果不是自定义控件	
+				ctrl.hwnd = ::CreateWindowEx (tvalue.exstyle, tvalue.cls , tvalue.text ,  tvalue.style  ,tvalue.left,tvalue.top,tvalue.right - tvalue.left , tvalue.bottom - tvalue.top,
+								  		this.hwnd , 
+								   		ctrl.id , 
+								   		this.hInstance   ) 
+			} 
+			else{
+				..win.setPos(ctrl.hwnd,tvalue.left,tvalue.top,tvalue.right - tvalue.left , tvalue.bottom - tvalue.top);
+			}
+			//记录所有子控件的窗口句柄　	
+			this._ctrlHwnd[ctrl.hwnd] = ctrl   	 
+			
+			//初始化控件
+			..win.ui.ctrl.factory.onCreateComplete(ctrl);
+		}
+
+
+    end;
+     
+	_tTimeProc = {};
+	addtimer = function(elapse,func){ 
+		 var  timeproc_c = this._tTimeProc[func]
+		 if(!timeproc_c){
+	     	timeproc_c =  ..raw.tostdcall(func,"void(int hwnd, INT uMsg, INT idEvent, INT dwTime)" );
+	     	this._tTimeProc[func] = timeproc_c;
+	     } 
+	     var id = ..table.push( this[["_tTimeProc"]] ,timeproc_c); //保存回调函数
+	     SetTimer(this.hwnd,id,elapse,timeproc_c); 
+	     return id;
+	} 
+	reghotkey  = function( func , mod,vk ){ 
+		 if(! this[["_hotkeys"]] ) this[["_hotkeys"]] = {};
+		 var id = ..table.push( this[["_hotkeys"]] ,func); //保存回调函数
+		 RegisterHotKey(this.hwnd,id,mod,vk);
+	     return id;
+	} 
+	unreghotkey  = function(idEvent){ 
+	     UnregisterHotKey(this.hwnd,idEvent);
+	     ..table.remove( this[["_hotkeys"]],idEvent);
+	} 
+	settimer = function(id,elapse){  
+	     var  timeproc_c = this._tTimeProc[id] 
+	     SetTimer(this.hwnd,id,elapse,timeproc_c); 
+	} 
+	killtimer = function(idEvent){  
+	     KillTimer(this.hwnd,idEvent);
+	     ..table.remove( this[["_tTimeProc"]],idEvent);
+	} 
+
+	pretranslate = false; //避免触发元表
+		 
+} 
+
+var loopmessage_l =  loopMessage 
+form.loadcode = function(code,parent){
+	loopMessage = function(){ }//禁用..win.loopMessage 
+	var f = assert( loadcode(code) );
+	var result = f(parent);
+	loopMessage  = loopmessage_l;//恢复..win.loopMessage 
+	return result;
+}
+	
+namespace form{ 
+	/*intellisense(win.form)*/
+	RegisterHotKey = ::User32.api("RegisterHotKey","int(int hwnd,int id,int fsModifiers,int vk)")
+	UnregisterHotKey = ::User32.api("UnregisterHotKey","Long(int hwnd,int id)")
+
+	SetLayeredWindowAttributes = ::User32.api("SetLayeredWindowAttributes","int(int hwnd,int crKey,BYTE bAlpha,INT dwFlags)");
+	DefWindowProc  = User32.api( "DefWindowProc", "int(int hWnd,INT msg,int wparam,int lParam) " ) 
+	RegisterClassEx = User32.api( "RegisterClassEx", " word(struct lpWndClass) " )  
+	GetClassInfo  = User32.api( "GetClassInfoA", "int(pointer hInstance,string lpClassName,struct &lpWndClass)" )  
+	
+	GetSysColor = ::User32.api("GetSysColor","int(int nIndex)") 
+	LoadCursor	:= User32.api(  "LoadCursorA", "pointer(pointer,string)") 
+	EnableWindow = ::User32.api("EnableWindow","int(int hwnd,int fEnable)")
+	WNDCLASSEX = class{ 
+    	INT     cbSize = 48; 
+    	INT     style = 0x2 | 0x1 | 0x8;//_CS_HREDRAW | _CS_VREDRAW | _CS_DBLCLKS;
+    	pointer    lpfnWndProc;
+    	int      cbClsExtra;
+    	int      cbWndExtra;
+    	pointer      hInstance;
+    	pointer      hIcon;
+    	pointer      hCursor;
+    	pointer      hbrBackground;
+    	string   lpszMenuName;
+    	string   lpszClassName;
+    	pointer      hIconSm;
+	}  
+	
+	CY_BORDER = ::GetSystemMetrics( 0x6/*_SM_CYBORDER*/ );
+	CX_BORDER = ::GetSystemMetrics( 0x5/*_SM_CXBORDER*/ );
+	CY_CAPTION = ::GetSystemMetrics( 0x4/*_SM_CYCAPTION*/  );
+ 
+ 	/*end intellisense*/
+ 	_wndproc =  function( hwnd,  message, wparam , lparam) {    
+			if( owner[["wndproc__"]] ) { 
+			    var result = owner[["wndproc__"]](  hwnd,  message, wparam , lparam );
+			    if( result !== null )//用非恒等式来排除0,false等逻辑假的值
+			          return result;
+		    }
+			 
+			select(message) { 
+				case 0x14/*_WM_ERASEBKGND*/    {     
+  					  var dlgRect = owner[["dlgRect"]]; //获取新的窗口区域   
+  					  var hdc = topointer(wparam)
+  				      if(! dlgRect ){
+  				       	dlgRect= ::RECT();
+  				       	::GetWindowRect( owner.hwnd , dlgRect ); //获取新的窗口区域
+  				       	owner[["dlgRect"]] = dlgRect;
+  				      }
+  				      
+  				      
+  				      var erase = 0;
+  				      if( type(owner[["bgcolor"]] ) == type.number && (owner[["bgcolor"]]!=-1) ){ //有可能为0 - 黑色,因为0为false,因此改用类型判断
+                      	var bgbrush = ::CreateSolidBrush( owner[["bgcolor"]]  );
+                      	var oldbrush   =   ::SelectObject(hdc,bgbrush ); 
+                      	::PatBlt(hdc,0,0,dlgRect.right - dlgRect.left   ,dlgRect.bottom - dlgRect.top,0xF00021/*_PATCOPY*/);   
+  					  	::SelectObject(hdc,oldbrush); 
+  				      	::DeleteObject(bgbrush);
+  				      	erase = 1;
+                      }
+                             
+  				      // winform的元表对于不存在的对象会返回一个空的table 
+  				      if( owner[[ "hBkbitmap" ]] ){  
+  				      	
+  				        var hdcMem   =   ::CreateCompatibleDC(hdc);     
+  						var hBitmapStartScanBAK   =   ::SelectObject(hdcMem,owner.hBkbitmap );   
+  						::BitBlt(hdc,0,0,dlgRect.right - dlgRect.left   ,dlgRect.bottom - dlgRect.top,hdcMem,0,0, 0xCC0020/*_SRCCOPY*/);   
+  						::SelectObject(hdcMem,hBitmapStartScanBAK);   
+  						::DeleteDC(hdcMem);  
+  						erase = 1; 
+                      }
+                        
+                      if( erase )  
+                      	return 1;
+                        
+  				}   
+				case 0x138/*_WM_CTLCOLORSTATIC*/ , 0x133/*_WM_CTLCOLOREDIT*/,0x135/*_WM_CTLCOLORBTN*/, 0x134/*_WM_CTLCOLORLISTBOX*/   {
+				    var ctrl = owner._ctrlHwnd[ lparam ];
+				    var hdc = topointer(wparam)
+					if( ctrl  ){  ; 
+						if( type(ctrl.color)==type.number )
+					    		::SetTextColor(hdc,ctrl.color ) ;
+					    	 	
+						if(ctrl.transparent) {
+					    	::SetBkMode(hdc,1);  
+							return tonumber(  ::GetStockObject(5) );//NULL_BRUSH
+						}
+						else if( ( type(ctrl[["bgcolor"]]) == type.number ) && (ctrl[["bgcolor"]]!=-1)) 
+						{
+						    //::SetBkMode(hdc,0); 
+					    	::SetBkColor(hdc,ctrl.bgcolor)  ;
+							ctrl.brush := ::CreateSolidBrush( ctrl.bgcolor )  ;
+							return  ctrl.brush ;//返回值必须与回调函数声明完全一致 
+						}
+					
+					}
+				}
+				case 0x5/*_WM_SIZE*/ { 
+				    if( hwnd == owner.hwnd){ //主窗口
+				    
+				        if( ..win.isIconic(hwnd) )
+				               return;
+				     
+				     	//获取新的窗口区域 (屏幕坐标)
+				    	owner.dlgRect = ::RECT();
+				    	var dlgRect = owner.dlgRect 
+				    	::GetWindowRect( owner.hwnd , dlgRect ); 
+				    	
+						var defDlg = owner._defDlgRect;
+						
+				    	//计算变化的比例
+				    	xrate = (dlgRect.right-dlgRect.left)/(defDlg.right-defDlg.left);
+				    	yrate = (dlgRect.bottom-dlgRect.top)/(defDlg.bottom-defDlg.top); 
+ 						 
+   						var defCtrl;//预设控件位置
+   						var width,height;//宽高
+   						var left,top,right,bottom;//这里表示边距
+   						
+   						var ptLt = {
+   							int x;
+   							int y; 
+   						};
+   						var ptRb  = {
+   							int x;
+   							int y;
+   						}
+   						
+   						for(id,ctrl in owner._ctrlId){
+   							defCtrl = ctrl._defCtrlRect;
+   						    width=(defCtrl.right-defCtrl.left);
+			                height=(defCtrl.bottom -defCtrl.top ); 
+			                
+   						    left = defCtrl.left-defDlg.left;
+   						    top = defCtrl.top-defDlg.top;
+   						    right = defCtrl.right-defDlg.right;
+   						    bottom = defCtrl.bottom-defDlg.bottom;
+   						    
+   					    	if( ctrl[["dl"]] )
+								ptLt.x = dlgRect.left + left ;
+							else
+								ptLt.x = dlgRect.left+ left * xrate ;
+							
+							if( ctrl[["dt"]] )
+								ptLt.y = dlgRect.top+ top ;
+							else
+								ptLt.y = dlgRect.top+ top *yrate ;
+							
+							if( ctrl[["dr"]] ) {
+								ptRb.x = dlgRect.right + right ;
+								 
+								if( ctrl[["aw"]] == false ) && ( ctrl[["dl"]] == false )
+									ptLt.x = ptRb.x  - width;
+							}
+							else {
+								if( ctrl[["aw"]] )
+									ptRb.x = dlgRect.right+ right * xrate ;
+								else
+									ptRb.x = ptLt.x+width;
+				
+							}
+				
+							if( ctrl[["db"]] ) 	{
+								ptRb.y= dlgRect.bottom+ bottom ;
+								if( ( ctrl[["ah"]] == false ) && ( ctrl[["dt"]] == false ) )
+									ptLt.y  = ptRb.y  - height ;
+							}
+							else{
+								if( ctrl[["ah"]] )
+									ptRb.y= dlgRect.bottom+ bottom * yrate ;
+								else
+									ptRb.y= ptLt.y + height;
+							}
+							 
+							::ScreenToClient(owner.hwnd,ptLt); 
+							::ScreenToClient(owner.hwnd,ptRb); 
+							
+							var adjust = ctrl[["adjust"]] ;
+							::MoveWindow( ctrl.hwnd ,ptLt.x,ptLt.y, ptRb.x - ptLt.x, ptRb.y - ptLt.y  ,adjust?1:0)
+							if( type( adjust) == type.function ){ 
+								adjust( ptRb.x - ptLt.x, ptRb.y - ptLt.y); //容器控件
+							}
+   					     	
+   						}
+   						owner.redraw();  
+   						
+   						if( type( owner[["adjust"]]  ) == type.function ){  
+   							owner.adjust( dlgRect.right-dlgRect.left,dlgRect.bottom-dlgRect.top);
+   						} 
+   					}
+   					
+				} 
+				case 0x111/*_WM_COMMAND*/ {
+					var wmId    = ::LOWORD(wparam);
+					var wmEvent = ::HIWORD(wparam); 
+					
+					var ctrl = owner._ctrlId[wmId];
+					if(ctrl) { 
+					    var oncommand = ctrl.oncommand;
+					    if(oncommand) 
+					          oncommand(wmId,wmEvent);  
+					}
+					else if( (!lparam) && wmId > 5000){
+					     wmId -= 5000; 
+					     var proc = owner._menus[wmId];
+					     if(type(proc)==type.function)
+					        proc(wmId+5000,wmEvent);
+					}
+				}
+				case 0x004E /*_WM_NOTIFY*/ {
+					if(lparam){
+						
+						wmId = wparam;
+						var ctrl = owner._ctrlId[wmId];
+						
+						if(ctrl && (ctrl._prenotify || ctrl.onnotify) ){ 
+							var  nmdr = ..raw.convert(topointer(lparam),NMHDR_L());
+						 
+							if( ctrl._prenotify ) 
+								ctrl._prenotify(wmId,nmdr.code,topointer(lparam) )
+							
+							if( ctrl.onnotify ) 
+								ctrl.onnotify(wmId,nmdr.code,topointer(lparam) ) 
+						
+						} 
+
+					}
+				
+				}
+				case 0x312/*_WM_HOTKEY*/{ 
+					var id = wparam; //这个是注册的时候设定的ID 
+					 
+            		if( owner[["_hotkeys"]] && ( type( owner[["_hotkeys"]][id] ) == type.function )  ){
+            		owner[["_hotkeys"]][id] (id,::LOWORD(lparam),::HIWORD(lparam) )
+            		}
+            
+				} 
+				case  0x2/*_WM_DESTROY*/ { 
+					 if( owner[["_ondestroy"]] ){
+				     	owner[["_ondestroy"]] ();
+				     }
+				     
+				     //删除所有定时器
+				     var tm = owner[["_tTimeProc"]]   
+				     for(id=1;#tm){
+				     	KillTimer(owner.hwnd,id);  
+				     } 
+				     
+				     //遍历控件 
+				     for(hwnd,ctrl in owner._ctrlHwnd){
+				         if( type(ctrl[["brush"]])==type.number){ //删除GDI对象
+				           ::DeleteObject( ctrl[["brush"]]  );
+				         } 
+				     }
+				     if( owner[["uniqueId"]] ){ 
+				     	owner.atom();//释放实例占用原子
+				     } 
+				     owner[["continueModal _"]] =null;//退出模态循环
+				      
+				    ..win.ui._forms[hwnd] = null;
+				    for(k,v in ..win.ui._forms ){
+				        //只要还有一个窗口存在，就不要退出当前线程  
+				        if(type(v)==type.table)
+				           	return  ::DefWindowProc(hwnd,message,wparam,lparam);
+				    }   
+					..win.quitMessage(); 
+					      
+					 
+				} 
+			}
+			
+			return  ::DefWindowProc(hwnd,message,wparam,lparam);
+		}
+ 	
+	metaProperty = ..win.ui.ctrl.metaProperty( 
+			 
+			//覆盖父类 ..win.ui.ctrl.metaProperty.common的redraw成员
+			redraw = function(){
+				//重绘窗口
+				if(owner[["menu"]])owner[["menu"]].redraw();
+				
+    			var rc = ::RECT();
+    			::GetClientRect(owner[["hwnd"]],rc); 
+    			::InvalidateRect(owner[["hwnd"]],rc,1);
+    			::UpdateWindow(owner[["hwnd"]]); 
+			}
+			doModal = function(hwndparent){ 
+			
+				if(!hwndparent)
+					hwndparent = owner[["parent"]];
+				 
+				if(type(hwndparent)==type.table) 
+				   hwndparent = hwndparent.hwnd;//winform.hwnd  
+				
+				if(hwndparent){ 
+					EnableWindow(hwndparent,0x0/*_FALSE*/);
+				}
+				
+				//设置模态对话框样式
+				owner.modifyStyle(0,0x80/*_DS_MODALFRAME*/) 
+				::SendMessageInt(owner[["hwnd"]],0x110/*_WM_INITDIALOG*/,0,0);
+				
+				//模态标记，加上空格等使之成为非法标识符，以避免与控件名字冲突
+				owner[["continueModal _"]] = true;
+				//显示窗体
+				owner.show(true); 
+				//SetForegroundWindow(owner.hwnd);
+				
+				while(owner[["continueModal _"]])   
+					..win.pumpMessage(); 
+				
+				//还原开始被禁用的窗体
+				if(hwndparent) {//启用父窗体 
+				    ..win.enable(hwndparent,1/*_TRUE*/); 
+				    ..win.setForeground(hwndparent) 
+				}
+				
+				::DestroyWindow(owner[["hwnd"]]);
+				..win.pumpMessage(); //pump exit message
+				
+				return owner[["result _"]];
+			}
+			endModal = function(result){
+				owner[["result _"]] = result;
+				owner[["continueModal _"]] =null;//退出模态循环 
+				
+			}  
+			loadcode = function(path){
+				return ..win.form.loadcode(path,owner /*指定父窗口*/ );
+			} 
+			msgbox = function(str,title = "AAuto" ,style){
+				..win.msgbox(str,title,style,owner[["hwnd"]] )
+			}
+			msgboxTest = function(str,title){
+				return ..win.msgboxTest(str,title,owner[["hwnd"]]  )
+			} 
+			transparent = function(alpha=128,clr ){
+	    		owner.modifyStyleEx(0,0x80000/*_WS_EX_LAYERED*/)
+				SetLayeredWindowAttributes( owner[["hwnd"]],clr:0, alpha,clr!==null?1:2)
+			}
+			image = {
+				_get = function(){ 
+					return owner[["image__"]];
+				}
+				_set = function( v ){
+					if(type(v)==type.string ){
+			    		v = ..string.trim( v  );
+			    		if(v!=""){
+			    			owner[["image__"]] = v;  
+			    			if( owner[["hBkbitmap"]] )
+			    				::DeleteObject(  owner[["hBkbitmap"]]  )
+			    				
+			    			if( ! owner[["bgcolor"]] )
+			    				owner[["bgcolor"]] = GetSysColor(0xF/*_COLOR_BTNFACE*/);
+			    			else{
+			    			    io.print('owner[["bgcolor"]]',owner[["bgcolor"]])
+			    			}
+			    			
+			    			var pic = ..win.ole.image.load(v)
+                			owner[["hBkbitmap"]] =  topointer(pic.handle);
+                			//..com.Release(pic);
+                		}
+                	}
+                	else if(v===null){
+                    	if(owner[["hBkbitmap"]])
+                            	::DeleteObject( tonumber( owner[["hBkbitmap"]] ) )
+                    	owner[["image__"]] = null; 
+                	} 
+				} 	
+			};  
+			
+			//无边框窗体支持
+			hitCaption = function () {
+				::PostMessage( owner.hwnd, 0xA1/*_WM_NCLBUTTONDOWN*/ , 0x2/*_HTCAPTION*/, 0 ); 
+			};
+			hitTopleft = function () {
+				::SendMessageInt( owner.hwnd, 0x112/*_WM_SYSCOMMAND*/, 0xF004/*_SC_SIZE | _WMSZ_TOPLEFT*/,0xD/*_HTTOPLEFT*/)
+			};
+			hitTop  = function () {
+				::SendMessageInt( owner.hwnd, 0x112/*_WM_SYSCOMMAND*/, 0xF003 ,0xC/*_HTTOP*/)
+			};
+			hitTopright  = function () {
+				::SendMessageInt( owner.hwnd, 0x112/*_WM_SYSCOMMAND*/, 0xF005,0xE/*_HTTOPRIGHT*/)
+			};
+			hitLeft  = function () {
+				::SendMessageInt( owner.hwnd, 0x112/*_WM_SYSCOMMAND*/, 0xF001,0xA/*_HTLEFT*/)
+			};
+			hitRight  = function () {
+				::SendMessageInt( owner.hwnd, 0x112/*_WM_SYSCOMMAND*/, 0xF002,0xB/*_HTRIGHT*/)
+			};
+			hitBottomleft = function () {
+				::SendMessageInt( owner.hwnd, 0x112/*_WM_SYSCOMMAND*/, 0xF007,0x10/*_HTBOTTOMLEFT*/)
+			};
+			hitBottom  = function () {
+				::SendMessageInt( owner.hwnd, 0x112/*_WM_SYSCOMMAND*/, 0xF006,0xF/*_HTBOTTOM*/)
+			};
+			hitBottomright  = function () {
+				::SendMessageInt( owner.hwnd, 0x112/*_WM_SYSCOMMAND*/, 0xF008,0x11/*_HTBOTTOMRIGHT*/)
+			}; 
+			hitmin  = function () {
+				::PostMessage(owner.hwnd, 0x112/*_WM_SYSCOMMAND*/,0xF020/*_SC_MINIMIZE*/, 0);  
+			}; 
+			hitmax = function(){
+				var zoomed = ..win.isZoomed(owner.hwnd);
+				if(zoomed)
+					::PostMessage(owner.hwnd, 0x112/*_WM_SYSCOMMAND*/,0xF120/*_SC_RESTORE*/, 0);  
+				else
+					::PostMessage(owner.hwnd, 0x112/*_WM_SYSCOMMAND*/,0xF030/*_SC_MAXIMIZE*/,0);
+				return !zoomed;
+			}
+			
+
+			get = function(k){ 
+				if( k != "_struct" ){
+/*
+					import debug
+					var a = debug.queryinfo(4,"select source,function,upvars,name,currentline,activelines")
+					io.print( a.source.src, a.currentline )
+*/
+					//..io.print( k,"可能是在设计器删除的控件");
+					return {};//在设计器删除的控件
+				}
+				
+			}
+		
+	)
+}
+

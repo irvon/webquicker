@@ -1,0 +1,188 @@
+import win;
+namespace win.ui 
+
+/******************************
+                                 ┌────┐
+                 ┌ ─ ─ ─ ─> │win.form│
+                 │              └────┘
+          ┌─────┐ menubase.add(lable,proc)
+          │  menubase│ menubase.close()
+          └─────┘ menubase.redraw()
+            △    △
+            /      \
+           /        \　   ┌─┐
+          /          \   1│　↓n
+ ┌────┐       ┌─────┐
+ │ menu   │ 1-->n │ popmenu  │popmenu.popup()
+ └────┘       └─────┘
+  
+******************************/
+
+//InsertMenu = User32.api("InsertMenuA","int(int hMenu,INT uPosition,INT uFlags,INT uIDNewItem,string lpNewItem)");
+
+//菜单基类
+menubase = class {
+	ctor( winform )begin
+   		assert(type(winform) == type.table && winform.hwnd,"必须指定有效的winform参数")
+   		this.parent = winform;
+   		this.parent._menus := {};
+   	end;
+   	
+   	//如果在第三个参数里传入 0x4/*_MF_BITMAP*/ 则第一个参数必须是位图句柄(指针)
+	add = function(lable,proc,mflag=0){
+    		if(!lable && (!prco) ){
+         		AppendMenu(this.hmenu,0x800/*_MF_SEPARATOR*/, 0,null );
+         		return;
+     		}
+       		
+    		if(  ( type(proc) == type.table ) && proc.hmenu ){
+         		AppendMenu(this.hmenu,0x10/*_MF_POPUP*/,proc.hmenu,lable );
+    		}
+    		else{
+    			assert(type(proc)==type.function,"参数二必须是一个回调函数") 
+    			var id = ..table.push( this.parent._menus, proc ) + 5000 ;
+    			AppendMenu(this.hmenu,0/*_MF_STRING*/ | mflag,id ,lable );
+    			..table.push(this,{id=id}) //menu[i].id 
+    		} 
+    		
+	}
+	close = function(){
+		DestroyMenu(this.hmenu)
+		
+		//如果是主菜单
+		if( this._onclose ){ 
+		    this._onclose(); 
+		}
+		this.hmenu = null;
+	} 
+	check = function(id,chk=true,flag=0x400/*_MF_BYPOSITION*/){ 
+		chk = chk ? 0x8/*_MF_CHECKED*/ : 0x0/*_MF_UNCHECKED*/ 
+		CheckMenuItem(this.hmenu,flag&0x400==0?id:id-1,flag | chk );
+	}
+	enable = function(id,enb=true,flag=0x400/*_MF_BYPOSITION*/ ){ 
+		if( enb === false)
+			enb =   0x1/*_MF_GRAYED*/ 
+		else
+			enb = 0;
+		EnableMenuItem(this.hmenu,flag&0x400==0?id:id-1,flag | enb );
+	}
+	checked = function(id ,flag=0x400/*_MF_BYPOSITION*/){
+		return ( GetMenuState(this.hmenu,flag&0x400==0?id:id-1, flag ) & 0x8/*_MF_CHECKED*/ ) == 0x8/*_MF_CHECKED*/
+	} 
+	getString = function(id,flag=0x400/*_MF_BYPOSITION*/){
+		var len,str = GetMenuString(this.hmenu,flag&0x400==0?id:id-1, 128,128,flag ) 
+		if(len)return str;
+	}
+	setString = function(id,str,flag=0x400/*_MF_BYPOSITION*/){
+		var len,str = ModifyMenuString(this.hmenu,flag&0x400==0?id:id-1, flag | 0x0/*_MF_STRING*/,flag&0x400?this[id].id:id,str) 
+		if(len)return str;
+	} 
+	
+}
+var menubase = menubase;
+
+namespace menubase{
+	ModifyMenuString = ::User32.api("ModifyMenuA","int(int hMenu,int nPosition,int wFlags,int wIDNewItem,string lpString)")
+	GetMenuString = ::User32.api("GetMenuStringA","int(int hMenu,int wIDItem,str& lpString,int nMaxCount,int wFlag)")
+	AppendMenu = ::User32.api("AppendMenuA","int(int hMenu,INT uFlags,INT uIDNewItem,string lpNewItem)" ) 
+	DestroyMenu  = ::User32.api("DestroyMenu","int(int)" ) 
+	
+	GetMenuState = ::User32.api("GetMenuState","int(int hMenu,int wID,int wFlags)")
+	CheckMenuItem = User32.api("CheckMenuItem","INT(int hMenu,INT uIDCheckItem,INT uCheck)");
+	EnableMenuItem = User32.api("EnableMenuItem","INT(int hMenu,INT uIDEnableItem,INT uEnable)");
+}
+ 
+menu = class{
+	ctor( winform )begin 
+		if(winform[["menu"]])
+    		winform.menu.close(); 
+    	
+   		this = menubase(winform);//继承基类
+   		
+   		this.hmenu = ::CreateMenu();
+    	SetMenu(winform.hwnd,this.hmenu);  
+    	winform.menu = this;
+	end; 
+	
+	redraw = function(){
+		DrawMenuBar(this.parent.hwnd);
+	}
+	_onclose = function(){
+		SetMenu(this.parent.hwnd,0);
+		this.parent.menu = null; //取消绑定
+		this.redraw()
+	} 
+	
+}
+
+//类有独立的名字空间
+namespace menu{
+	SetMenu := ::User32.api("SetMenu","int(int hWnd,int hMenu)" ) 
+	CreateMenu :=  User32.api("CreateMenu","int()" )
+	DrawMenuBar := User32.api("DrawMenuBar","int(int hWnd)" )
+}
+
+
+popmenu = class{
+	
+	ctor( winform )begin 
+   		this = menubase(winform);//继承基类 
+   		this.hmenu = CreatePopupMenu(); 
+	end; 
+
+ 
+	popup = function(x,y,screen){  
+	     //在指定坐标(x,y)弹出菜单
+	     if( type(x) == type.table )
+	     {
+	         y = x.y;
+	         x = x.x;
+	     }
+	     assert(type(x)==type.number && type(y) == type.number,"菜单弹出坐标必须是数字")
+	      
+	     
+	     var pt = ::POINT();
+	     pt.x = x;
+	     pt.y = y;
+	     
+	     if(!screen){
+	     ::ClientToScreen( this.parent.hwnd,pt);
+	     }
+	    
+	    TrackPopupMenu( this.hmenu, 0x2/*_TPM_RIGHTBUTTON*/ | 0/*_TPM_LEFTALIGN*/ ,pt.x,pt.y , 0,this.parent.hwnd,null);
+	}
+	
+ 
+}
+
+//类有独立的名字空间
+namespace popmenu{
+
+	CreatePopupMenu := ::User32.api("CreatePopupMenu","int()" )
+	TrackPopupMenu := User32.api("TrackPopupMenu","int(int hMenu,INT uFlags,int x,int y,int nReserved,int hWnd, pointer prcRect)" ) 
+}
+
+
+/**intellisense()
+!menu.redraw() = 重绘菜单 
+!menu.add("菜单标题",__/*回调函数或子菜单*/) = 添加菜单项或子菜单
+!menu.close() = 关闭菜单
+!menu.check(.(菜单项序号) =选中菜单项
+!menu.check(.(菜单项序号,false) =取消选中菜单项
+!menu.enable(.(菜单项序号) = 启用菜单项
+!menu.enable(.(菜单项序号,false) = 禁用菜单项
+!menu.checked(__/*菜单项序号*/) = 返回菜单项是否选中状态 
+!popmenu.add() = 添加分隔线
+!popmenu.add("菜单标题",__/*回调函数或子菜单*/) = 添加菜单项或子菜单
+!popmenu.close() = 关闭菜单
+!popmenu.check(.(菜单项序号) =选中菜单项
+!popmenu.check(.(菜单项序号,false) =取消选中菜单项
+!popmenu.enable(.(菜单项序号) = 启用菜单项
+!popmenu.enable(.(菜单项序号,false) = 禁用菜单项
+!popmenu.checked(__/*菜单项序号*/) = 返回菜单项是否选中状态 
+!popmenu.getString(__/*菜单项序号*/) = 返回菜单项文本
+!popmenu.setString(__/*菜单项序号*/,) = 设置菜单项文本
+!popmenu.popup(.(x坐标,y坐标,是否屏幕坐标=false) = 弹出菜单
+?win.ui.menu = !menu.
+?win.ui.popmenu = !popmenu.
+end intellisense**/

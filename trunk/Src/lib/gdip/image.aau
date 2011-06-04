@@ -1,0 +1,88 @@
+ 
+namespace gdip 
+
+//创建类
+class image {
+	ctor(arg,...){
+		if(type(arg) == type.string){
+			if(#arg<= 0x104/*_MAX_PATH*/ ){
+				this.path = ..io.exist( arg) 
+				if( this.path ){
+					 this.pImage = gdip.assert( gdip.LoadImageFromFile (..string.toUnicode( this.path  ) )  )    
+				} 
+			}
+			if(!this.pImage)
+				this.pImage = gdip.assert( gdip.loadImageFromString (arg )  )   
+			
+		}
+		
+		if(!this.pImage)
+			error("参数必须是字符串(图片文件路径或内容)",2)
+	
+	}
+	
+	_gcdata = ..gcdata(
+		_gc = function(){ 
+			this.dispose()
+		} 
+	);
+
+	@metaProperty//元表指向属性表
+}
+
+namespace image{
+gdip = ..gdip;
+
+import util.metaProperty;//导入属性表支持库
+metaProperty = util.metaProperty(
+	//从图像创建画布
+	graphics =  {
+		_get = function(){ 
+			return gdip.assert( gdip.GetImageGraphicsContext( owner[["pImage"]] ) ) 
+		}  	
+	};  
+    
+	width = {
+		_get = function(){ 
+			return gdip.assert(  gdip.GetImageWidth(owner[["pImage"]], 0)) ; 
+		}  	
+	}; 
+	
+	height = {
+		_get = function(){ 
+			return gdip.assert( gdip.GetImageHeight(owner[["pImage"]], 0)) ; 
+		}  	
+	}; 
+	
+	save = function(path,quality){
+		gdip.checkError(
+			gdip.SaveImage( owner[["pImage"]],path : this.path,quality ) 
+			,2
+		)
+		
+	}
+	dispose = function(){
+		if( owner[["pImage"]] ){
+			gdip.DisposeImage(owner[["pImage"]])
+			owner[["pImage"]] = null;//让其他的函数都用不了
+		}
+	}
+	
+	//自动转换为API指针
+	_topointer = function(){
+		return owner[["pImage"]];
+	}
+)
+ 
+}
+ 
+/**intellisense()
+gdip.image("__/*请输入文件路径\n或图片数据*/") = 创建GDI+L图片对象
+!gdipimage.width = 宽度
+!gdipimage.graphics  = 从图像创建画布
+!gdipimage.height = 高度
+!gdipimage.save("__/*请输入文件路径*/") = 保存图像\n使用参数指定的文件路径或加载图片时的路径\n根据后缀名自动设定格式
+!gdipimage.save("__/*请输入文件路径*/",80) = 保存图像\n使用参数指定的文件路径或加载图片时的路径\n根据后缀名自动设定格式\njpg文件可使用第二个参数指定图像质量
+!gdipimage.dispose() = 释放图像\n此对象支持自动释放,不必手工调用此函数
+?gdip.image = !gdipimage.
+end intellisense**/

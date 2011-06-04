@@ -1,0 +1,154 @@
+//静态接口支持
+import com;
+import win.guid;
+namespace com;
+
+::Ole32 := ..raw.loadDll("ole32.dll")
+::Exe := ..raw.loadDll();
+                           
+var COMOBJECT = class{
+　　pointer vtbl; 
+}
+
+class interface{
+	ctor(objptr,itface){ 
+		checkInterface(itface); 
+		this._unknow = ..com.GetIUnknown(objptr,itface.IID)
+		assert(this._unknow,"无效的com指针")  
+			
+		var cobj = COMOBJECT();
+		var vtbl = itface();
+		var proto = itface();  
+		 
+		..raw.convert( this._unknow ,cobj); 
+		..raw.convert( cobj.vtbl,vtbl);
+		
+		//修正错误信息
+		repaireErr = function(e,k){
+			e = ..string.replace(
+				e,
+				"\@(\d)",
+				function(c){
+					c--;
+					return "@" +c; 
+				}
+			) 
+			return ..string.replace(e,"'\?'",k);
+		}
+		
+		
+		for( k,addr in vtbl){
+			if( type(addr) != type.pointer )
+				continue;
+		 
+		    //创建接口函数
+		    var protofunc = proto[k]
+		    protofunc = ..string.replace(protofunc,"@(","(POINTER this,");
+			proto[k] = Exe.api(addr,protofunc) ;
+			
+			//计算输出参数个数
+			var out = 0;
+			..string.replace(protofunc,"\&",function(c){ out++ } );
+			
+			if( ! out ){
+				this[k] = function(...){
+					var ok,ret = call( proto[k], ,this._unknow,...) 
+					if(!ok)  
+						error( repaireErr(ret,k) ,2);  
+					return ret ;
+				} 
+			}
+			else {
+			   this[k] = function(...){ 
+					var tret = { call( proto[k], ,this._unknow,...) }
+					if(!tret[1]){ 
+						error( repaireErr(tret[2],k) ,2); 
+					} 
+					return rget(2,..table.unpack(tret) );
+				} 
+			}
+			
+		}
+		this.QueryInterface = function(itface){
+				checkInterface(itface); 
+				var hr,objptr = proto.QueryInterface(this._unknow,itface.IID ); 
+				checkError(hr,2);
+				return ..com.interface(objptr,itface);
+				
+		}
+		
+	}
+	@{_topointer = pointer}
+}
+
+namespace interface{
+	CoCreateInstance = Ole32.api("CoCreateInstance","int(struct rclsid, pointer pUnkOuter,INT dwClsContext, struct riid, pointer &ppv)" )
+                           
+	var guidsize = ..raw.sizeof( ..win.guid() );
+	checkInterface = function(interface){
+	    if(type(interface)!=type.class)
+	    	error("接口必须是一个类",2)
+	
+		if( type(interface.IID) ==type.string){
+			interface.IID = ..win.guid.fromString(interface.IID)
+		}
+		
+		if(  ( type(interface.IID)!=type.table ) 
+			|| (..raw.sizeof(interface.IID) != guidsize)  )
+			error("未指定接口IID(类的静态成员,字符串或guid对象)",2)
+	} 
+ 	checkError = function(hr,ci = 1){
+		if(  hr<0/*FAILED*/ ) 
+			error(..lasterr(hr),ci + 1) 
+	}
+	create = function(clsid,itface,context=5/*_CLSCTX_LOCAL_SERVER*/){
+		if(type(clsid)==type.string)
+			clsid = ..win.guid.fromString(clsid)
+			 
+		checkInterface(itface);  
+		var iid =itface.IID ;
+		var hr,unknown =CoCreateInstance(clsid,null,context,iid ); 
+		checkError(hr,2);
+		return ..com.interface(unknown,itface);
+	}
+	
+	//定义接口
+	class IUnknown{ 
+		//所有com接口必须直接继承此接口
+    	pointer QueryInterface = "int(struct iid,pointer &ptr, )" ;
+    	pointer AddRef = "int()" ;
+    	pointer Release ="int()" ;
+	}
+	IUnknown.IID = "{00000000-0000-0000-C000-000000000046}";
+
+}
+ 
+/**intellisense(com.interface)
+checkInterface(__/*接口类*/) = 检查是否法的接口类\n不合法则抛出异常
+checkError(__/*请输入COM静态接口函数返回值*/) = 如果有错误调用error函数抛出异常
+checkError(__/*请输入COM静态接口函数返回值+函数返回值*/,2) = 如果有错误调用error函数抛出异常\n参数2指定抛出异常的调用级别\n2表示调用当前函数的函数
+interface.create(.(clsid,静态接口类) = 创建静态接口对象
+end intellisense**/                
+
+/**intellisense()
+com.interface(.(com对象,静态接口类) = 参数一可以是com对象、com指针、托管com指针\n参数二是接口类,参考com.interface.IUnknown源码
+?.QueryInterface = !interface.
+?.interface = !interface.
+?.interface.create = !interface. 
+!interface.AddRef() = 引用计数加一,返回引用计数
+!interface.Release() = 引用计数减一,返回引用计数
+!interface.QueryInterface(__/*接口数*/) = 参数是接口类,参考com.interface.IUnknown源码
+end intellisense**/
+ 
+                   
+
+/**intellisense()
+SUCCEEDED = @ (__/*hr*/)>=0/*SUCCEEDED*/
+FAILED = @ (__/*hr*/)<0/*FAILED*/
+_CLSCTX_INPROC_SERVER=@0x1/*_CLSCTX_INPROC_SERVER*/
+_CLSCTX_INPROC_HANDLER=@2/*_CLSCTX_INPROC_HANDLER*/
+_CLSCTX_LOCAL_SERVER=@4/*_CLSCTX_LOCAL_SERVER*/
+_CLSCTX_SERVER=@5/*_CLSCTX_LOCAL_SERVER*/
+end intellisense**/
+                   
+ 
