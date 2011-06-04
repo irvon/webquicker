@@ -1,0 +1,193 @@
+namespace webquicker.parser;
+
+import inet.url;
+
+parseRequest = function (str) {
+	// 解析请求头
+	var get, post, cookie, header, requireRedirect = {}, {}, {}, {}, false;
+	var method, url, p = ..string.match(str, "(<GET>|<POST>) ([^\?]+)\?([^\s]+) HTTP/1\.1");
+	if (!p) {
+		method, url = ..string.match(str, "(<GET>|<POST>) ([^\s]+) HTTP/1\.1");
+	} else {
+		// 解析 GET 参数
+		p = ..string.split(p, "&");
+		for (k, v in p) {
+			var name, value = ..string.match(v, "([^=]+)=(.+)");
+			if (name && value) {
+				name = ..string.trim(name);
+				get[name] = ..inet.url.unEscape(value);
+			}
+		}
+	}
+	
+	url := "\";
+	url = ..string.fromto(..inet.url.unEscape(url)); // 解码 url（处理中文或其他特殊字符）
+	url := "\";
+	if (url != ..string.replace(url, "\\", "/")) {
+		url = ..string.replace(url, "\\", "/"); // 替换 \ 为 /
+		requireRedirect = true;
+	}
+	
+	var parts = ..string.split(str, '<\r\n\r\n>'); // 将 str 分割成请求参数及 POST 数据
+	
+	// 解析 header
+	var lines = ..string.split(parts[1] or "", '<\r\n>');
+	for (k, v in lines) {
+		var name, value = ..string.match(v, "([^\:]+)\: (.+)");
+		if (name && value) {
+			name = ..string.trim(name);
+			header[name] = value;
+		}
+	}
+	
+	if (#parts > 1) {
+		// 解析 POST 参数
+		p = ..string.split(parts[2], "&");
+		for (k, v in p) {
+			var name, value = ..string.match(v, "([^=]+)=(.+)");
+			if (name && value) {
+				name = ..string.trim(name);
+				post[name] = ..inet.url.unEscape(value);
+			}
+		}
+	}
+	
+	if (header["Cookie"]) {
+		// 解析 Cookie
+		p = ..string.split(header["Cookie"], ";");
+		for (k, v in p) {
+			var name, value = ..string.match(v, "([^=]+)=(.+)");
+			if (name && value) {
+				name = ..string.trim(name);
+				cookie[name] = ..inet.url.unEscape(value);
+			}
+		}
+	}
+	
+	return { method = method; url = url; get = get; post = post; cookie = cookie; header = header; requireRedirect = requireRedirect; };
+}
+
+// 生成回复
+response = class {
+
+	ctor (socket) {
+		var hSocket = socket;
+		
+		this.status = "200 OK";
+		this.header = {};
+		this.header["Content-Type"] = "text/html";
+		
+		var t = ..time.now();
+		t.format = "!%a, %d %b %Y %H:%M:%S GMT";
+		this.header["Date"] = tostring(t);
+		
+		this.header["Connection"] = "close";
+		
+		this.body = "";
+		
+		this.cookie = {};
+	}
+	
+	write = function (str) {
+		this.body = this.body ++ tostring(str);
+		if (#this.body > 65000) {
+			this.flush();
+		}
+	}
+	
+	flush = function () {
+		if (this.header) {
+			var responseHeader = this.makeResponseHeader();
+			..wsock.send(hSocket, responseHeader, #responseHeader, 0);
+			this.header = null;
+		}
+		..wsock.send(hSocket, this.body, #this.body, 0);
+		this.body = "";
+	}
+	
+	clear = function () {
+		this.body = "";
+	}
+	
+	redirect = function (url) {
+		this.status = "302 Found";
+		this.header["Location"] = url;
+	}
+	
+	makeResponseHeader = function (contentLength) {
+		var str = "HTTP/1.1 " + this.status + '\r\n';
+		
+		// 生成 header
+		for (key, value in this.header) {
+			str = str ++ key + ": " + value + '\r\n';
+		}
+		
+		// 生成 cookie
+		if (..table.count(this.cookie)) { // key-value 序列不应用 # 操作符
+			for (key, value in this.cookie) {
+				str = str + "Set-Cookie: ";
+				if (value[["value"]]) {
+					str = str ++ key + "=" + ..inet.url.encode(value.value);
+					if (value[["expires"]]) {
+						if (type(value.expires) == type.number) {
+							// 以秒为单位的生存期
+							var secs = value.expires;
+							value.expires = time.now();
+							value.expires.addminute(secs);
+						}
+						value.expires.addhour(-8); // GMT +0:00
+						value.expires.format = "!%a, %d %b %Y %H:%M:%S GMT"; // 到 GMT 时间
+						str = str + "; Expires=" + tostring(value.expires);
+					}
+					if (value[["domain"]]) {
+						str = str + "; Domain=" ++ ..inet.url.encode(value.domain);
+					}
+				} else {
+					str = str ++ key + "=" + ..inet.url.encode(value);
+				}
+				str = str + "; Path=" + (value[["path"]] or "/");
+				str = str + '\r\n';
+			}
+		}
+		
+		if (contentLength) {
+			str = str + "Content-Length: " + contentLength + '\r\n';
+		}
+		
+		str = str + '\r\n';
+		
+		return str;
+	}
+	
+	makeResponse = function () {
+		var str = this.makeResponseHeader();
+		str = str ++ this.body;
+		return str;
+	}
+	
+	// 元表
+	@ {
+		_set = function (name, value) {
+			..io.print(name, value);
+		}
+	}
+	
+}
+
+mime = {
+	htm = "text/html";
+	html = "text/html";
+	css = "text/css";
+	js = "text/javascript";
+	bmp = "image/bitmap";
+	jpg = "image/jpeg";
+	jpeg = "image/jpeg";
+	gif = "image/gif";
+	png = "image/png";
+};
+
+indexes = {
+	"index.aau";
+	"index.html";
+	"default.html";
+};

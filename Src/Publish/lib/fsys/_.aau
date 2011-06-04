@@ -1,0 +1,455 @@
+
+namespace fsys;
+   
+::Shell32 := ..raw.loadDll("Shell32")
+ 
+SetCurrentDirectory := ::Kernel32.api( "SetCurrentDirectory", "int(string path )"); 
+GetCurrentDirectory := ::Kernel32.api( "GetCurrentDirectory", "INT(INT nBufferLength, string & lpBuffer )"); 
+GetSystemDirectory := ::Kernel32.api( "GetSystemDirectoryA", "int(string &str,int size )"); 
+GetWindowsDirectory := ::Kernel32.api( "GetWindowsDirectoryA", "int(string &str,int size )");
+GetTempPath := ::Kernel32.api( "GetTempPathA", "int(int size ,string &str)");  
+FindFirstFile := ::Kernel32.api("FindFirstFileA", "int(string,struct&)") 
+FindNextFile := ::Kernel32.api("FindNextFileA", "int(int,struct&)") 
+FindClose := ::Kernel32.api("FindClose", "int(int)") 
+GetShortPathName = ::Kernel32.api("GetShortPathName","int(string long,str&short,int size)")
+GetLongPathName = ::Kernel32.api("GetLongPathName","int(string  short,str&long,int size)")
+
+
+longpath = function(path){
+	var len,path = GetLongPathName(path,0x104/*_MAX_PATH*/,0x104/*_MAX_PATH*/);
+	return len ? path
+}
+
+shortpath = function(path){
+	if(!..string.indexAny(path,"/\"))
+		return path;
+	var len,path = GetShortPathName( ..io.fullpath(path) ,0x104/*_MAX_PATH*/,0x104/*_MAX_PATH*/);
+	return len ? path;
+}
+
+joinpath = function(dir,path){ 
+	dir = ..io.fullpath(dir);
+	path = ..string.replace(path,'/','\\');
+	if( dir[#dir]=='\\'# || path[1]=='\\'# )
+		return dir ++ path;
+	else 
+		return dir +'\\'+ path;	
+}
+ 
+getCurDir = function(){
+	var re,str = GetCurrentDirectory(0x104,0x104) //_MAX_PATH = 0x104
+	return ..string.str( str );
+}
+
+setCurDir = function(dir){
+	return SetCurrentDirectory(dir);
+}
+
+getSysDir = function(){
+	var re,str = GetSystemDirectory(0x104,0x104) //_MAX_PATH = 0x104
+	return ..string.str( str );
+}
+
+getWinDir = function(){
+	var re,str = GetWindowsDirectory(0x104,0x104)
+	return ..string.str( str );
+}
+
+getTempDir = function(){
+	var re,str = GetTempPath(0x104,0x104)
+	return ..string.str( str );
+}
+
+var CreateDirectoryApi = ::Kernel32.api("CreateDirectoryA", "int(string lpPathName,pointer lpSecurityAttributes)");
+var createDirAux;
+createDirAux = function(strDir){
+	// base case . . .if directory exists
+	if(..io.exist(strDir))
+		return;
+
+	// recursive call, one less directory
+	var nFound = ..string.lastIndexAny( strDir,"/\" );
+	if(nFound && strDir[nFound-1]!=':'#){ 
+		createDirAux( ..string.left(strDir,nFound - 1) ); 
+	}
+
+	// actual work 
+	CreateDirectoryApi(strDir);
+}
+createDir = function(strDir){
+	createDirAux( ..io.fullpath(strDir) );
+}
+
+getParentDir = function(path){
+	path = ..string.trim(path,"/\" );
+	var f = ..string.lastIndexAny( path,"/\" );
+	return f ? ..string.left(path,f  ) 
+}
+
+createParentDir = function(strDir){
+	createDir( getParentDir(strDir) );
+}
+
+searchFile = function(filename,dir){
+	if( dir ){
+		return  ..io.exist(joinpath(dir,filename))
+	} 
+	return searchFile( filename, ..io.localpath("\"))
+		|| searchFile( filename,getCurDir() ) 
+		|| searchFile( filename,getSysDir() ) 
+		|| searchFile( filename,getWinDir() )  
+}
+
+/**intellisense(fsys) 
+shortpath(__/*路径*/) = 转换为短文件名
+longpath(__/*路径*/) = 转换为长文件名
+joinpath("__/*父目录*/","") = 合并文件路径
+getCurDir() = 获取当前目录
+setCurDir(__/*目录*/) = 设置当前目录
+getSysDir() = 返回系统目录
+getWinDir() = 返回windows目录
+getTempDir() = 返回临时目录
+createDir("__") = 创建目录路径.
+createParentDir("__") = 创建指定路径的父目录.
+getParentDir("__") = 返回指定路径的父目录
+searchFile("__/*文件名*/") = 检查程序根目录、当前工作目录、系统目录\n如果包含指定文件,则返回文件完整路径
+searchFile("__/*文件名*/",目录) = 检查指定目录下是否包含指定文件\n如果存在返回完整路径,否则返回null
+end intellisense**/
+
+
+SHGetPathFromIDList  := Shell32.api("SHGetPathFromIDListA","int(pointer pidl,str & str)");
+SHGetSpecialFolderLocation  := Shell32.api("SHGetSpecialFolderLocation","int(int hwndOwner, int nFolder,pointer &ppidl)" )
+SHFileOperation := Shell32.api("SHFileOperationA","int(pointer lpFileOp)");
+
+::Ole32 := ..raw.loadDll("Ole32.dll")
+CoTaskMemFree := Ole32.api("CoTaskMemFree","void(pointer hMem)" ) 
+
+getSpecial = function(id=0){
+	var re,pid = SHGetSpecialFolderLocation (0,id); 
+	if(re>=0){ 
+		var re,path = SHGetPathFromIDList( pid,260) 
+		CoTaskMemFree(pid)
+		return path;
+	}
+} 
+
+
+var SHFILEOPSTRUCT = class {
+	int hwnd = 0;
+	INT wFunc;
+	string pFrom;
+	string pTo;
+	WORD fFlags;
+	int fAnyOperationsAborted;
+	pointer hNameMappings;
+	string lpszProgressTitle;//进度条标题，仅在fFlags标志中指定了//FOF_SIMPLEPROGRESS
+}
+
+operation = function( op, 
+	from,to,
+	flag = 0x10/*_FOF_NOCONFIRMATION*/ | 0x4/*_FOF_SILENT*/ | 0x200/*_FOF_NOCONFIRMMKDIR*/,
+	title,hwnd ) { 
+	
+    var fo = SHFILEOPSTRUCT(); 
+    if( ! (#from)  ) error("请指定源文件路径",3); 
+    from = ..io.fullpath(from) 
+    from = ..string.trimright(from,"\/") + '\0'; //MSDN:This string must be double-null terminated. 
+    if(#to){
+    	to = ..io.fullpath(to) 
+    	to = ..string.trimright(to,"\/") + '\0'; 
+    } 
+    fo.wFunc = op;
+    fo.pFrom = from ;
+    fo.pTo = to; 
+    fo.fFlags = flag;
+    fo.hwnd = hwnd; 
+	if(title){
+    	fo.lpszProgressTitle = title + '\0\0';
+    	flag |= 0x100/*_FOF_SIMPLEPROGRESS*/
+    	
+    }
+    
+    fo = ..raw.malloc(fo)
+    for(i=21;#fo;1){
+    	fo[i-2] = fo[i] 
+    } 
+    
+    return SHFileOperation(fo) == 0; 
+} 
+delete = function(from,flag,title,hwnd){
+	return operation( 0x0003,from, ,flag,title,hwnd); 
+}
+move = function(from,to,flag,hwnd){ 
+	return operation( 0x1/*_FO_MOVE*/,from,to,flag,title,hwnd); 
+}
+copy = function(from,to,flag,title,hwnd){ 
+	return operation( 0x2/*_FO_COPY*/,from,to,flag,title,hwnd); 
+}
+rename = function(from,to,flag,title,hwnd){ 
+	return operation( 0x4/*_FO_RENAME*/,from,to,flag,title,hwnd); 
+}
+
+/**intellisense(fsys)
+getSpecial(_CSIDL__) = 获取指定目录，参数为_CSIDL开头的常量\nfsys.getSpecial()//默认获取桌面目录\nfsys.getSpecial( _CSIDL_RECENT ) //获取用户最近文档目录
+delete(__/*路径*/) = 删除文件或目录\n支持非空目录\n文件名支持通配符 
+move(__/*源路径*/) = 移动文件或目录\n文件名支持通配符
+copy(__/*源路径*/) = 复制文件或目录\n文件名支持通配符
+rename(__/*源路径*/) = 重命名文件或目录
+delete("",_FOF__) = 删除文件或目录\n支持非空目录\n自定义参数
+move("","",_FOF__) = 移动文件或目录\n自定义参数
+copy("","",_FOF__) = 复制文件或目录\n自定义参数
+rename("","",_FOF__) = 重命名文件或目录\n自定义参数
+end intellisense**/
+  
+ 
+/*intellisense(fsys)*/ 
+WIN32_FIND_DATA := class{
+    INT dwFileAttributes;
+    struct ftCreationTime = ::FILETIME();
+    struct ftLastAccessTime = ::FILETIME();
+    struct ftLastWriteTime = ::FILETIME();
+    INT nFileSizeHigh ;
+    INT nFileSizeLow; 
+    INT dwReserved0;
+    INT dwReserved1;
+    BYTE cFileName[ 260 ];
+    BYTE cAlternateFileName[ 14 ];
+}
+/*end intellisense*/
+
+/**intellisense(findData)
+dwFileAttributes = 0;//文件属性
+ftCreationTime = 文件创建时间\n请调用fsys.fromFileTime()转换为time对象
+ftLastAccessTime = 文件最后一次访问时间\n请调用fsys.fromFileTime()转换为time对象
+ftLastWriteTime =  文件最后一次修改时间\n请调用fsys.fromFileTime()转换为time对象 
+nFileSizeHigh = 文件长度高32位 
+nFileSizeLow = 件长度低32位 
+cFileName = 长文件名\n请调用string.str去掉尾部的\0
+cAlternateFileName = 8.3格式文件名\n请调用string.str去掉尾部的\0
+end intellisense**/
+
+FileTimeToSystemTime = ::Kernel32.api("FileTimeToSystemTime","int(struct filetime,struct& time)")
+fromFileTime = function(filetime){
+	var ok,tm = FileTimeToSystemTime(filetime,..time() )
+	if(ok)
+		return tm;
+} 
+
+
+/**intellisense()
+?fsys.WIN32_FIND_DATA = findData.
+?.fromFileTime = !time. 
+fsys.fromFileTime(__/*FILETIME结构体*/) = 将::FILETIME结构体转换为time对象
+end intellisense**/
+
+var function  enum_aux(dir,p="*.*",proc ,enumSubdir){
+	if( not ..string.endWith( dir,"\") ) {
+		dir = dir + "\";
+	}
+	var data = WIN32_FIND_DATA()
+	var filename;
+	var fullpath;
+	var hf,data =  FindFirstFile(dir + p,data); //搜索文件，按指定的通配符
+	if(hf != -1/*_INVALID_HANDLE_NUM*/){
+		do{ 
+			filename =..string.str( data.cFileName ) 
+			if( (#filename) && (filename!=".") &&  ( filename!=".." ) ){
+				fullpath =  joinpath(dir,filename)
+				if( ( data.dwFileAttributes & 0x10/*_FILE_ATTRIBUTE_DIRECTORY*/ ) == 0 ){  
+					proc( dir,filename,fullpath,data ); 
+				}
+				else {
+					proc( fullpath,,,data ); 
+				}
+			}
+			
+		} while( FindNextFile(hf,data) )
+		FindClose(hf);
+	} 
+	
+	var hf,data =  FindFirstFile(dir + "*.*",data); //搜索所有目录
+	if(hf != -1/*_INVALID_HANDLE_NUM*/){
+		do{
+			if( data.dwFileAttributes & 0x10/*_FILE_ATTRIBUTE_DIRECTORY*/ ) { 
+				filename =..string.str( data.cFileName )  
+				if( (filename!=".") &&  ( filename!=".." ) ) {  
+					if(enumSubdir){
+						fullpath = joinpath(dir,filename);
+						enum_aux( fullpath,p,proc,enumSubdir );
+					}
+				}
+			}
+		}while(FindNextFile(hf,data) )
+		FindClose(hf);
+	}
+}
+
+function enum(dir,p="*.*",proc,enumSubdir=true/*是否搜索子目录*/){ 
+	if( not ..string.endWith( dir,"\") ) {
+		dir = dir + "\";
+	}
+	dir = ..io.fullpath(dir);  
+	assert(..io.exist(dir) ,"目录不存在" + (dir:"") )
+	assert(type(proc)==type.function,"必须为win.enumFiles指定回调函数")  
+	enum_aux( dir,p,proc,enumSubdir);
+}
+
+
+/**intellisense(fsys)
+enum  =  @.enum(  "__", \n			"*.*", \n			function(dir,file,fullpath,findData){ \n				if(file){ \n           			io.print("发现文件："+file,"完整路径："+fullpath)\n				}\n				else{\n					io.print("发现目录：" + dir)\n				}\n			} \n		  );
+end intellisense**/
+
+getAttributes = ::Kernel32.api("GetFileAttributesA","int(str path)")
+setAttributes = ::Kernel32.api("SetFileAttributesA","int(str path,int attributes)")
+attrib  = function(f,remove,add){
+	f = ..io.fullpath(f)
+	
+	var a = getAttributes(f);
+	if(!remove && ! add)
+		return a;
+		
+	remove := 0;
+	add := 0;
+	a = ( a  & ~remove ) | add ; 
+	if( setAttributes( f,a) )
+		return a;
+}
+ 
+isHidden = function(f){ 
+	var s = attrib(f)
+	return (s!=-1) && ( s & 2/*_FILE_ATTRIBUTE_HIDDEN*/);
+}
+isSystem = function(f){
+	var s = attrib(f)
+	return (s!=-1) && ( s & 4/*_FILE_ATTRIBUTE_SYSTEM*/);
+}
+isDir = function(f){
+	var s = attrib(f)
+	return (s!=-1) && ( s & 0x10/*_FILE_ATTRIBUTE_DIRECTORY*/);
+}
+isReadonly = function(f){
+	var s = attrib(f)
+	return (s!=-1) && ( s & 1/*_FILE_ATTRIBUTE_READONLY*/);
+}
+
+
+/**intellisense(fsys)
+setAttributes("",_FILE_ATTRIBUTE__) = 设置文件属性
+attrib("__/*文件路径*/") = 返回文件属性\n以_FILE_ATTRIBUTE_前缀的常量标志各属性
+attrib("",_FILE_ATTRIBUTE__/*多个属性用 | 链接*/) = 移除件属性\n参数一为文件路径\n参数二可以用 | 操作符连接多个属性\n成功返回新属性,失败返回null
+attrib("",/*移除*/,_FILE_ATTRIBUTE__/*多个属性用 | 链接*/) = 添加文件属性\n参数一为文件路径\n参数三可以用 | 操作符连接多个属性\n成功返回新属性,失败返回null
+isDir("__/*路径*/")  = 路径是否目录\n调用attrib检查目标路径是否具有_FILE_ATTRIBUTE_DIRECTORY属性
+isReadonly("__/*文件路径*/")  = 文件是否只读\n调用attrib检查文件是否具有_FILE_ATTRIBUTE_READONLY属性
+isSystem("__/*文件路径*/")  = 是否系统文件\n调用attrib检查文件是否具有_FILE_ATTRIBUTE_SYSTEM属性
+isHidden("__/*文件路径*/")  = 是否隐藏文件\n调用attrib检查文件是否具有_FILE_ATTRIBUTE_HIDDEN属性 
+end intellisense**/
+
+
+//Shlwapi提供的文件\路径相关函数
+::Shlwapi := ..raw.loadDll("Shlwapi.dll");
+StrFormatByteSize = Shlwapi.api("StrFormatByteSizeA", "string(int, str&, INT)" )
+formatSize = function (size){
+	var re, size = StrFormatByteSize(size, 128, 128);
+	return size;
+}
+namespace path{ 
+	PathCompactPath = Shlwapi.api("PathCompactPathA", "int(pointer hdc, str&lpszPath, INT dx)" )
+	PathCanonicalize = Shlwapi.api("PathCanonicalizeA", "int(str &dst,str src)" )  
+	PathCommonPrefix = Shlwapi.api("PathCommonPrefixA", "int(str,str,str&)" ) 
+	
+	compact = function(path,pix = 300){
+		var re,path = PathCompactPath( ,path,pix)
+		return path;
+	} 
+	commonPrefix = function(path,path2){
+		var len,path3 = PathCommonPrefix(path,path2,0x104/*_MAX_PATH*/)
+		return path3;
+	} 
+ 	canonicalize = function(path){
+ 		var ret,cp = PathCanonicalize(0x104/*_MAX_PATH*/,path)
+ 		return cp
+ 	}
+ 	addBackslash = function(path){
+ 		return ( path[#path] =='\\'# )?path:path+"\"
+ 	}   
+}
+
+/**intellisense(fsys)
+formatSize(__/*数值*/) = 转换数字字节值到KB，MB，GB 
+end intellisense**/
+
+/**intellisense(fsys.path) 
+compact(.(文件路径,显示像素宽度) = 截断路径来适合一定数目的像素
+commonPrefix(.(路径,路径2) = 返回两个文件路径的公共前缀 
+canonicalize(__/*路径*/) = 对路径进行归一化处理\n扩展和适当置换路径中包含的所有..和.
+addBackslash(__/*路径*/) = 在目录路径后添加"\"
+end intellisense**/
+
+
+
+/**intellisense()
+//用于fsys.getSpecial的参数常量
+_CSIDL_DESKTOP  = @0x0000 /*_CSIDL_DESKTOP*/ // <desktop>
+_CSIDL_INTERNET  = @0x0001 /*_CSIDL_INTERNET*/ // Internet Explorer (icon on desktop)
+_CSIDL_PROGRAMS  = @0x0002 /*_CSIDL_PROGRAMS*/ // Start Menu\Programs
+_CSIDL_CONTROLS  = @0x0003 /*_CSIDL_CONTROLS*/ // My Computer\Control Panel
+_CSIDL_PRINTERS  = @0x0004 /*_CSIDL_PRINTERS*/ // My Computer\Printers
+_CSIDL_PERSONAL  = @0x0005 /*_CSIDL_PERSONAL*/ // My Documents
+_CSIDL_FAVORITES  = @0x0006 /*_CSIDL_FAVORITES*/ // <user name>\Favorites
+_CSIDL_STARTUP  = @0x0007 /*_CSIDL_STARTUP*/ // Start Menu\Programs\Startup
+_CSIDL_RECENT  = @0x0008 /*_CSIDL_RECENT*/ // <user name>\Recent
+_CSIDL_SENDTO  = @0x0009 /*_CSIDL_SENDTO*/ // <user name>\SendTo
+_CSIDL_BITBUCKET  = @0x000a /*_CSIDL_BITBUCKET*/ // <desktop>\Recycle Bin
+_CSIDL_STARTMENU  = @0x000b /*_CSIDL_STARTMENU*/ // <user name>\Start Menu
+_CSIDL_MYDOCUMENTS  = @0x0005 /*_CSIDL_MYDOCUMENTS*/ // Personal was just a silly name for My Documents
+_CSIDL_MYMUSIC  = @0x000d /*_CSIDL_MYMUSIC*/ // "My Music" folder
+_CSIDL_MYVIDEO  = @0x000e /*_CSIDL_MYVIDEO*/ // "My Videos" folder
+_CSIDL_DESKTOPDIRECTORY = @0x0010 /*_CSIDL_DESKTOPDIRECTORY*/ // <user name>\Desktop
+_CSIDL_DRIVES  = @0x0011 /*_CSIDL_DRIVES*/ // My Computer
+_CSIDL_NETWORK  = @0x0012 /*_CSIDL_NETWORK*/ // Network Neighborhood (My Network Places)
+_CSIDL_NETHOOD  = @0x0013 /*_CSIDL_NETHOOD*/ // <user name>\nethood
+_CSIDL_FONTS  = @0x0014 /*_CSIDL_FONTS*/ // windows\fonts
+_CSIDL_TEMPLATES  = @0x0015
+_CSIDL_COMMON_STARTMENU = @0x0016 /*_CSIDL_COMMON_STARTMENU*/ // All Users\Start Menu
+_CSIDL_COMMON_PROGRAMS = @0x0017 /*_CSIDL_COMMON_PROGRAMS*/ // All Users\Start Menu\Programs
+_CSIDL_COMMON_STARTUP = @0x0018 /*_CSIDL_COMMON_STARTUP*/ // All Users\Startup
+_CSIDL_COMMON_DESKTOPDIRECTORY = @0x0019 /*_CSIDL_COMMON_DESKTOPDIRECTORY*/ // All Users\Desktop
+_CSIDL_APPDATA  = @0x001a /*_CSIDL_APPDATA*/ // <user name>\Application Data
+_CSIDL_PRINTHOOD  = @0x001b /*_CSIDL_PRINTHOOD*/ // <user name>\PrintHood
+_CSIDL_LOCAL_APPDATA = @0x001c /*_CSIDL_LOCAL_APPDATA*/ // <user name>\Local Settings\Applicaiton Data (non roaming)
+_CSIDL_ALTSTARTUP = @0x001d /*_CSIDL_ALTSTARTUP*/ // non localized startup
+_CSIDL_COMMON_ALTSTARTUP = @0x001e /*_CSIDL_COMMON_ALTSTARTUP*/ // non localized common startup
+_CSIDL_COMMON_FAVORITES = @0x001f
+_CSIDL_INTERNET_CACHE = @0x0020
+_CSIDL_COOKIES  = @0x0021
+_CSIDL_HISTORY  = @0x0022
+_CSIDL_COMMON_APPDATA = @0x0023 /*_CSIDL_COMMON_APPDATA*/ // All Users\Application Data
+_CSIDL_WINDOWS  = @0x0024 /*_CSIDL_WINDOWS*/ // GetWindowsDirectory()
+_CSIDL_SYSTEM  = @0x0025 /*_CSIDL_SYSTEM*/ // GetSystemDirectory()
+_CSIDL_PROGRAM_FILES = @0x0026 /*_CSIDL_PROGRAM_FILES*/ // C:\Program Files
+_CSIDL_MYPICTURES = @0x0027 /*_CSIDL_MYPICTURES*/ // C:\Program Files\My Pictures
+_CSIDL_PROFILE  = @0x0028 /*_CSIDL_PROFILE*/ // USERPROFILE
+_CSIDL_SYSTEMX86  = @0x0029 /*_CSIDL_SYSTEMX86*/ // x86 system directory on RISC
+_CSIDL_PROGRAM_FILESX86 = @0x002a /*_CSIDL_PROGRAM_FILESX86*/ // x86 C:\Program Files on RISC
+_CSIDL_PROGRAM_FILES_COMMON = @0x002b /*_CSIDL_PROGRAM_FILES_COMMON*/ // C:\Program Files\Common
+_CSIDL_PROGRAM_FILES_COMMONX86 = @0x002c /*_CSIDL_PROGRAM_FILES_COMMONX86*/ // x86 Program Files\Common on RISC
+_CSIDL_COMMON_TEMPLATES = @0x002d /*_CSIDL_COMMON_TEMPLATES*/ // All Users\Templates
+_CSIDL_COMMON_DOCUMENTS = @0x002e /*_CSIDL_COMMON_DOCUMENTS*/ // All Users\Documents
+_CSIDL_COMMON_ADMINTOOLS = @0x002f /*_CSIDL_COMMON_ADMINTOOLS*/ // All Users\Start Menu\Programs\Administrative Tools
+_CSIDL_ADMINTOOLS = @0x0030 /*_CSIDL_ADMINTOOLS*/ // <user name>\Start Menu\Programs\Administrative Tools
+_CSIDL_CONNECTIONS = @0x0031 /*_CSIDL_CONNECTIONS*/ // Network and Dial-up Connections
+_CSIDL_COMMON_MUSIC = @0x0035 /*_CSIDL_COMMON_MUSIC*/ // All Users\My Music
+_CSIDL_COMMON_PICTURES = @0x0036 /*_CSIDL_COMMON_PICTURES*/ // All Users\My Pictures
+_CSIDL_COMMON_VIDEO = @0x0037 /*_CSIDL_COMMON_VIDEO*/ // All Users\My Video
+_CSIDL_RESOURCES  = @0x0038 /*_CSIDL_RESOURCES*/ // Resource Direcotry
+_CSIDL_RESOURCES_LOCALIZED = @0x0039 /*_CSIDL_RESOURCES_LOCALIZED*/ // Localized Resource Direcotry
+_CSIDL_COMMON_OEM_LINKS = @0x003a /*_CSIDL_COMMON_OEM_LINKS*/ // Links to All Users OEM specific apps
+_CSIDL_CDBURN_AREA = @0x003b /*_CSIDL_CDBURN_AREA*/ // USERPROFILE\Local Settings\Application Data\Microsoft\CD Burning
+_CSIDL_COMPUTERSNEARME = @0x003d /*_CSIDL_COMPUTERSNEARME*/ // Computers Near Me (computered from Workgroup membership)
+_CSIDL_FLAG_CREATE = @0x8000 /*_CSIDL_FLAG_CREATE*/ // combine with _CSIDL_ value to force folder creation in SHGetFolderPath()
+_CSIDL_FLAG_DONT_VERIFY = @0x4000 /*_CSIDL_FLAG_DONT_VERIFY*/ // combine with _CSIDL_ value to return an unverified folder path
+_CSIDL_FLAG_DONT_UNEXPAND = @0x2000 /*_CSIDL_FLAG_DONT_UNEXPAND*/ // combine with _CSIDL_ value to avoid unexpanding environment variables
+_CSIDL_FLAG_NO_ALIAS = @0x1000 /*_CSIDL_FLAG_NO_ALIAS*/ // combine with _CSIDL_ value to insure non-alias versions of the pidl
+_CSIDL_FLAG_PER_USER_INIT = @0x0800 /*_CSIDL_FLAG_PER_USER_INIT*/ // combine with _CSIDL_ value to indicate per-user init (eg. upgrade)
+_CSIDL_FLAG_MASK  = @0xFF00 /*_CSIDL_FLAG_MASK*/ // mask for all possible flag values
+end intellisense**/

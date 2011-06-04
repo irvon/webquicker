@@ -1,0 +1,808 @@
+//进程
+
+process = class{ 
+	ctor( pid , parameters="", startInfo )begin
+		var t = type(pid);
+		if( t == type.number ){
+			var access = type(parameters)==type.number?parameters: 0x1FFFFF/*_PROCESS_ALL_ACCESS*/ 
+   			this.handle = OpenProcess( access,false ,pid);
+   			this.id = pid;
+   		}
+   		elseif( pid || #parameters ){
+   			sa = STARTUPINFO();   
+			for(k,v in startInfo  ){
+				sa[k] = v; 
+			}  
+			if( sa.suspended )
+			 	sa.creationFlag |= 0x4/*_CREATE_SUSPENDED*/
+			
+   			var pfile = ..io.exist(pid);
+   			if(pfile){ 
+				assert( pfile,'文件不存在,\n参数必须是绝对路径!' ) 
+				
+	    		if(!sa.workdir) 
+	    			sa.workdir = ..io.splitpath(pfile).dir ; 
+	    				
+	    		var exe,shellpath = findExe(pfile); 
+	    		if(exe && #shellpath) {
+	    			parameters = ..string.concat(shellpath, " ", parameters )
+	    			pfile = exe;
+	    		}
+	    		
+	    		if( #parameters )  
+  					parameters = " "+parameters;
+	    	}
+	    	elseif(#pid) {
+	    		parameters = ..string.concat(pid," ",parameters);
+	    	}  
+   				
+			var pf = PROCESS_INFORMATION();  
+   			if( ! CreateProcess(pfile ,parameters
+   				, sa.processAttributes 
+   				, sa.threadAttributes 
+   				, sa.inheritHandles
+   				, sa.creationFlag
+   				, sa.environment
+   				, sa.workdir
+   				, sa
+   				, pf) ) {     
+  				error( ..string.concat("启动进程时遇到错误.",..lasterr() ) ,2) ;   
+  			}   
+  			else{   
+  				 if(!sa.suspended) 
+  					WaitForInputIdle(pf.hProcess,0xFFFFFFFF);  
+  					
+  				this.handle =  pf.hProcess;
+  				this.id = pf.dwProcessId;
+  				this.tid = pf.dwThreadId;
+  				this.thandle = pf.hThread;  
+  			}
+   				
+   		}
+   		else{
+   			//自身进程
+   			this.id = getId();
+   			this.handle = getHandle();
+   		}
+   		
+   		//创建析构对象  
+   		this._gc = ..gcdata(
+   			_gc = function(){
+   				this.free();
+   			} 
+   		)
+   	
+   	end;
+	
+	//强行终止进程
+	terminate = function(){
+		if(this.handle){
+		TerminateProcess( this.handle , 0) 
+		this.free();
+		}
+	}
+	
+	//释放进程
+	free = function(){ 
+		if(this.handle)
+			..raw.closehandle(this.handle);
+		if(this.thandle)
+			..raw.closehandle(this.thandle);	
+		this.handle = null;
+		this.thandle = null;
+		this.id = null;
+		this.tid = null;
+	}
+	wait = function(){
+		..thread.wait(this.handle) 
+		this.free();
+	}
+	
+	remoteApi = function(...){ 
+		return ..raw.remoteApi(this.handle,...)
+	}
+ 
+	readNumber = function(baseAddr,datatype = "int" ){ 
+		var struct = { _struct = datatype + " result" } 
+		this.readStruct(baseAddr,struct);
+		return struct.result;
+	}
+	
+	//读取定长字符串
+	readString = function(baseAddr,len = 1){   
+		var result,lpBuffer,readNum = ReadProcessMemoryByString(this.handle,baseAddr,len,len,0) 
+		return  lpBuffer,readNum; 
+	}
+	 
+	readStruct = function(baseAddr,struct){ 
+		assert(this.handle,"进程控制对象已关闭!")
+		var result,lpStruct,readNum = ReadProcessMemory(this.handle,baseAddr,struct,..raw.sizeof(struct),0)
+		return lpStruct,readNum
+	}
+	
+	writeNumber = function(baseAddr,v,datatype = "int"){ 
+		var struct = { _struct = datatype + " num"; num = v} 
+		return this.writeStruct(baseAddr,struct); 
+	}
+	
+	//写入字符串
+	writeString = function(baseAddr,str){  
+		var result,readNum  = WriteProcessMemoryByString(this.handle,baseAddr,str,#str,0) 
+		return  readNum ;
+	}
+	 
+	writeStruct = function(baseAddr,struct){ 
+		assert(this.handle,"进程控制对象已关闭!")
+		var result,readNum = WriteProcessMemory(this.handle,baseAddr,struct,..raw.sizeof(struct),0)
+		return readNum;
+	}
+	  
+	//所有参数可选
+	query = function( addr,protect=0,memtype=0,addrMin,addrMax){
+		assert(this.handle,"进程控制对象已关闭!")
+		
+		if(!systeminfo){
+			systeminfo = SYSTEM_INFO();
+			GetSystemInfo(systeminfo);
+		}
+	 
+	    addrMin := systeminfo.lpMinimumApplicationAddress
+	    addrMax := systeminfo.lpMaximumApplicationAddress
+	    addr := addrMin;   
+	    
+		var mi = MEMORY_BASIC_INFORMATION();
+		 
+	
+		var retvalue = 0;
+		var misize = ..raw.sizeof(mi);
+		var handle = this.handle;
+	
+		while ( addr < addrMax ) {
+			retvalue = VirtualQueryEx(handle, addr, mi, misize);
+			if(retvalue!=misize)
+				break;
+	 
+	
+			if (mi.State == 0x1000/*_MEM_COMMIT*/){
+				if( memtype && (memtype != (memtype & mi.Type) )){
+				
+				}
+				elseif( protect && (protect != (protect & mi.Protect))){
+				
+				}
+				else{ 
+         			return mi.BaseAddress,mi.RegionSize,mi.Protect&~(0x100/*_PAGE_GUARD*/|0x200/*_PAGE_NOCACHE*/),mi.Type 
+				}
+			}
+	
+			addr = mi.BaseAddress + mi.RegionSize ;
+	
+		}
+	
+		return 0;
+	}
+	
+     
+    setAffinity = function( cpu =1 ){
+    	SetProcessAffinityMask( this.handle,cpu );
+    }
+    
+    //memery allocate
+	malloc = function(size,protect=0x40,alloctype=0x1000){
+		return VirtualAllocEx(this.handle,0,size,alloctype,protect)
+	}
+	 
+	//memery free
+	mfree = function(address,size=0,freetype=0x8000){
+		VirtualFreeEx(  this.handle,address,size,freetype)
+	}
+	
+	eachModule = function(){
+		return self.eachModule(this.id)
+	}
+	eachThread = function(){
+		return self.eachThread(this.id)
+	}
+	getPath = function(){
+		var len,path = GetModuleFileNameEx( this.handle, ,0x104/*_MAX_PATH*/,0x104/*_MAX_PATH*/);
+		return path;
+	} 
+	getPriorityClass = function(){
+		return GetPriorityClass( this.handle );
+	}
+	setPriorityClass = function(p){
+		return SetPriorityClass( this.handle,p );
+	}
+	
+}
+
+ 
+namespace process{
+
+	::Shell32 := ..raw.loadDll("Shell32")
+	
+	/*intellisense(process)*/ 
+	SHELLEXECUTEINFO  = class {
+		INT cbSize = 60; // in, required, sizeof of this structure
+		INT fMask; // in, SEE_MASK_XXX values
+		int hwnd; // in, optional
+		string lpVerb; // in, optional when unspecified the default verb is choosen
+		string lpFile; // in, either this value or lpIDList must be specified
+		string lpParameters; // in, optional
+		string lpDirectory; // in, optional
+		int nShow; // in, required
+		int hInstApp; // out when SEE_MASK_NOCLOSEPROCESS is specified
+		pointer lpIDList; // in, valid when SEE_MASK_IDLIST is specified, PCIDLIST_ABSOLUTE, for use with SEE_MASK_IDLIST & SEE_MASK_INVOKEIDLIST
+		string lpClass =""; // in, valid when SEE_MASK_CLASSNAME is specified
+		int hkeyClass; // in, valid when SEE_MASK_CLASSKEY is specified
+		INT dwHotKey; // in, valid when SEE_MASK_HOTKEY is specified
+		union DUMMY={ 
+			int hIcon=0; // not used
+			int hMonitor=0; // in, valid when SEE_MASK_HMONITOR specified
+		}; 
+		pointer hProcess; // out, valid when SEE_MASK_NOCLOSEPROCESS specified
+	}
+	
+	MEMORY_BASIC_INFORMATION = class {
+ 		pointer BaseAddress;
+ 		pointer AllocationBase;
+ 		INT AllocationProtect;
+ 		SIZE_T RegionSize;
+ 		INT State;
+ 		INT Protect;
+ 		INT Type;
+	}
+	   
+	PROCESS_INFORMATION = class {
+ 		pointer hProcess;
+ 		pointer hThread;
+ 		INT dwProcessId;
+ 		INT dwThreadId;
+	}
+
+	VirtualAllocEx = ::Kernel32.api("VirtualAllocEx","int(pointer hProcess ,int lpAddress,int dwSize,int flAllocationType,int flProtect)")
+	VirtualFreeEx = ::Kernel32.api("VirtualFreeEx","int(pointer hProcess,int lpAddress,int dwSize,int dwFreeType)")
+	
+	SetProcessAffinityMask = ::Kernel32.api("SetProcessAffinityMask","INT(pointer hProcess,INT dwProcessAffinityMask)" )
+	ReadProcessMemory = Kernel32.api("ReadProcessMemory","int(pointer hProcess,int lpBaseAddress,struct &lpBuffer,INT nSize,INT & lpNumberOfBytesRead)" )
+	ReadProcessMemoryByString = Kernel32.api("ReadProcessMemory","int(pointer hProcess,int lpBaseAddress,string &lpBuffer,INT nSize,INT & lpNumberOfBytesRead)" )
+	
+	WriteProcessMemory = Kernel32.api("WriteProcessMemory","int(pointer hProcess,int lpBaseAddress,struct lpBuffer,INT nSize,INT & lpNumberOfBytesRead)" )
+	WriteProcessMemoryByString = Kernel32.api("WriteProcessMemory","int(pointer hProcess,int lpBaseAddress,string lpBuffer,INT nSize,INT & lpNumberOfBytesRead)" )
+	
+	MEMORY_BASIC_INFORMATION = class {
+ 		int BaseAddress;
+ 		int AllocationBase;
+ 		INT AllocationProtect;
+ 		INT RegionSize;
+ 		INT State;
+ 		INT Protect;
+ 		INT Type;
+	}
+	VirtualQueryEx = Kernel32.api("VirtualQueryEx","INT(pointer hProcess,int lpAddress,struct& lpBuffer,INT dwLength)" )
+	SYSTEM_INFO = class {
+ 		struct dummy = {
+ 			WORD wProcessorArchitecture;
+ 			WORD wReserved;
+ 		};
+ 		INT dwPageSize;
+ 		int lpMinimumApplicationAddress;
+ 		int lpMaximumApplicationAddress;
+ 		int dwActiveProcessorMask;
+ 		INT dwNumberOfProcessors;
+ 		INT dwProcessorType;
+ 		INT dwAllocationGranularity;
+ 		WORD wProcessorLevel;
+ 		WORD wProcessorRevision;
+	}
+	GetSystemInfo= Kernel32.api("GetSystemInfo","void(struct &lpSystemInfo)");
+	
+	FindExecutable = ::Shell32.api("FindExecutableA","int(string file,string directory,str &result)")	
+	OpenProcess  = Kernel32.api("OpenProcess","pointer(INT desiredAccess,bool inherit,INT pid)")
+	TerminateProcess  = Kernel32.api("TerminateProcess","int(pointer hProcess,INT exitCode)")
+	
+	SetPriorityClass = ::Kernel32.api("SetPriorityClass","bool(POINTER hProcess,INT priorityClass)");
+	GetPriorityClass = ::Kernel32.api("GetPriorityClass","INT(POINTER hProcess");
+	
+	ShellExecute = Shell32.api("ShellExecute","int(int hwnd,string lpOperation,string lpFile,string lpParameters,string lpDirectory,int nShowCmd)" );
+	ShellExecuteEx = Shell32.api("ShellExecuteExA","int(struct & pExecInfo)" );
+	 
+	WaitForInputIdle = ::User32.api("WaitForInputIdle","INT(pointer hProcess,INT dwMilliseconds)");
+	CreateProcess =  Kernel32.api("CreateProcessA","int(string app, string &cmd, pointer processAttributes,pointer threadAttributes, bool inheritHandles, INT creationFlags,str environment, string lpCurrentDirectory, struct lpStartupInfo, struct& lpProcessInformation )");
+ 		
+	CreateToolhelp32Snapshot = Kernel32.api("CreateToolhelp32Snapshot","pointer(INT,INT)"); 
+
+	::Psapi = ..raw.loadDll("Psapi.dll");
+	GetModuleFileNameEx = Psapi.api("GetModuleFileNameEx","INT(pointer hProcess,pointer hModule,str& lpFilename,INT nSize)" )
+ 
+	/*end intellisense*/
+	STARTUPINFO  = class {
+ 		INT cb = 68;
+ 		string reserved;
+ 		string desktop;
+ 		string title;
+ 		INT x;
+ 		INT y;
+ 		INT xSize;
+ 		INT ySize;
+ 		INT xCountChars;
+ 		INT yCountChars;
+ 		INT fillAttribute;
+ 		INT flags;
+ 		WORD showWindow;
+ 		WORD cbReserved2;
+ 		string lpReserved2;
+ 		pointer stdInput;
+ 		pointer stdOutput;
+ 		pointer stdError;
+ 		//下面是携带CreateProcess需要的参数
+ 		creationFlag = 0;
+ 		inheritHandles;
+	}
+	
+	findExe = function(path){
+		path = ..io.fullpath(path);
+		var tpath = ..io.splitpath(path);
+		if( ..string.cmp(tpath.ext,".exe") == 0 ){ 
+			return path;
+		}
+		var ret,exe = FindExecutable(path, ,0x104/*_MAX_PATH*/);
+		if(ret>32)
+			return exe,path
+	}
+	
+ 	
+	getId  = Kernel32.api("GetCurrentProcessId","INT()") 
+	getHandle  = Kernel32.api("GetCurrentProcess","pointer()") 
+	DuplicateHandle = ::Kernel32.api( "DuplicateHandle", "bool(pointer srcProcess,pointer handle,pointer targetProcess,pointer& outHandle,INT desiredAccess,bool inherit,INT options)");
+	dup = function(handle,src,target,inherit=true,opt=3/*_DUPLICATE_CLOSE_SOURCE | _DUPLICATE_SAME_ACCESS*/,access=0){
+		src := getHandle();
+		target := getHandle();  
+		var ok,outHandle = DuplicateHandle( src, handle,target, ,access, inherit,opt   );
+		if(ok)
+			return outHandle
+	} 
+	
+	//强行终止进程
+	kill = function(exefile){
+		if( type(exefile) == type.string ){
+			var reVal =    ShellExecute(0,"open","cmd.exe", " /c taskkill  /f /im " + exefile ,"",0/*SW_HIDE*/ ) ;
+			return reVal>32 ;
+		}
+		else if( type(exefile) == type.number ){
+			var reVal =   ShellExecute(0,"open","cmd.exe", " /c ntsd -c q -p " + exefile ,"",0/*SW_HIDE*/ ) ;
+			if(reVal<=32) 
+				reVal =   ShellExecute(0,"open","cmd.exe", " /c taskkill /f /pid " + exefile ,"",0/*SW_HIDE*/ );
+				
+			return reVal>32 ;
+		}
+	}
+	
+/**
+	execute_ret_err = { 
+	[0x2/*_SE_ERR_FNF*/] = "没有找到文件";
+    [0x3/*_SE_ERR_PNF*/] = "没有找到路径";
+    [0x5/*_SE_ERR_ACCESSDENIED*/] = "拒绝访问";
+    [0x8/*_SE_ERR_OOM*/] = "内存不足";
+    [0x20/*_SE_ERR_DLLNOTFOUND*/] = "没有找到动态链接库";
+    [0x1A/*_SE_ERR_SHARE*/] = "不能操作一个以打开的文件";
+    [0x1B/*_SE_ERR_ASSOCINCOMPLETE*/] = "文件关联信息不完整";
+    [0x1C/*_SE_ERR_DDETIMEOUT*/] = "DDE操作超时";
+    [0x1D/*_SE_ERR_DDEFAIL*/] = "DDE操作失败";
+    [0x1E/*_SE_ERR_DDEBUSY*/] = "DDE繁忙";
+    [0x1F/*_SE_ERR_NOASSOC*/] = "没有找到文件关联";
+    }
+**/
+  
+	..process.execute = function( file, parameters="",operation = "open",showCmd=5,workdir,hwnd=0,wait){
+	    assert(type(file)==type.string,"文件路径必须是字符串对象")
+	    file = ..io.localpath(file) : file;
+	    
+	    if(!workdir)
+	    	workdir = ..io.splitpath(file).dir ;
+   		
+   		var shinfo = SHELLEXECUTEINFO();  
+   		shinfo.cbSize = ..raw.sizeof(shinfo); assert(shinfo.cbSize ==60 )
+		shinfo.fMask = 0x00000040 //| 0x00000400 //SEE_MASK_NOCLOSEPROCESS|SEE_MASK_FLAG_NO_UI;
+		shinfo.hwnd = hwnd;
+		shinfo.lpVerb = operation;
+		shinfo.lpFile =  file;		
+		shinfo.lpParameters =  parameters ;	
+		shinfo.lpDirectory = workdir ;
+		shinfo.nShow = showCmd;
+		shinfo.hInstApp = 0;	
+		shinfo.lpClass =""; 
+		
+		var ret = ShellExecuteEx(shinfo);
+		
+
+  
+		if(!ret) return null,"打开进程失败:" + file;
+		if(!shinfo.hProcess )return;
+		
+		if( wait ){
+			..thread.wait(shinfo.hProcess)
+			..raw.closehandle(shinfo.hProcess)
+		}
+		else{
+			WaitForInputIdle(shinfo.hProcess,0xFFFFFFFF  /*, Infinite timeout*/);
+			..raw.closehandle( shinfo.hProcess  ) 
+			
+		}
+		return ret;
+
+	}
+	execute_wait = function( file, parameters="",operation="open",showCmd,workdir="",hwnd=0){
+		..process.execute(file,parameters,operation,showCmd,workdir,hwnd,1)
+	}
+	
+	explore_select = function(file){
+		..process.execute(  "Explorer.exe"," /select," + ..io.fullpath(file) )
+	} 
+	
+	eachSnap = function(pid,snapCs,firstEntry,entryFirst,entryNext) { 
+    	firstEntry.dwSize = ..raw.sizeof(firstEntry);
+    	var hsnap= CreateToolhelp32Snapshot (snapCs,pid )   
+    	assert(hsnap!=_INVALID_HANDLE_VALUE,"创建快照失败 CreateToolhelp32Snapshot failed ")  
+    	
+   		var freeItor = function(){  
+   			if(hsnap){ //避免重复析构 
+   				..raw.closehandle(hsnap);
+   				hsnap = null;
+   			}
+   		}  
+   		
+   		//防止使用return等直接跳出循环,转换为可析构的托管指针
+   		var gcSnap = ..gcdata(
+        	_gc = freeItor;
+        	_topointer = hsnap
+        )
+   		
+		return function( entry ) { //接收for循环传递的参数得到迭代器控制变量 
+			var next;
+			
+			if(entry)
+				next = entryNext(gcSnap, entry); 
+			else
+				next,entry = entryFirst(gcSnap, firstEntry)  
+				
+			if(next)
+				return entry
+		} , freeItor ;
+	
+	}
+	
+	/*intellisense(process)*/
+	MODULEENTRY32= class{ 
+        INT dwSize; 
+        INT th32ModuleID; 
+        INT th32ProcessID; 
+        INT GlblcntUsage; 
+        INT ProccntUsage;
+        pointer modBaseAddr; 
+        INT modBaseSize; 
+        pointer hModule; 
+        byte szModule[256];
+        byte szExePath[0x104/*_MAX_PATH*/];
+    }
+    Module32First = ::Kernel32.api("Module32First","int(pointer hsnap,struct& lppe)")
+	Module32Next = ::Kernel32.api("Module32Next","int(pointer hsnap,struct& lppe)")
+	/*end intellisense*/
+	
+    eachModule = function(pid) {
+    	return eachSnap( pid:getId(),0x8/*_TH32CS_SNAPMODULE*/,MODULEENTRY32(),Module32First,Module32Next)
+	} 
+	
+	/*intellisense(process)*/
+	THREADENTRY32 = class {
+ 	INT dwSize;
+ 	INT cntUsage;
+ 	INT th32ThreadID; // this thread
+ 	INT th32OwnerProcessID; // Process this thread is associated with
+ 	int tpBasePri;
+ 	int tpDeltaPri;
+ 	INT dwFlags;
+	}
+	Thread32First = ::Kernel32.api("Thread32First","int(pointer hsnap,struct& lppe)")
+	Thread32Next = ::Kernel32.api("Thread32Next","int(pointer hsnap,struct& lppe)") 
+	/*end intellisense*/
+	
+    eachThread = function(pid) {  
+    
+    	var nextSnap,freeItor = eachSnap( pid:getId(),0x4/*_TH32CS_SNAPTHREAD*/,THREADENTRY32(),Thread32First,Thread32Next) 
+    	
+		return function( entry ) { //接收for循环传递的参数得到迭代器控制变量 
+			entry = nextSnap( entry ) 
+	    	while(entry){   
+	        	if(!pid || pid==entry.th32OwnerProcessID)
+	               	return entry; 
+	               	  
+	    		entry = nextSnap(entry) ;
+	    	} 
+ 			
+		},freeItor  
+	}
+	
+	/*intellisense(process)*/
+	PROCESSENTRY32 = class { 
+    	INT   dwSize = 296;
+    	INT   cntUsage = 0;
+    	INT   th32ProcessID = 0;          // this process
+    	INT th32DefaultHeapID = 0;
+    	INT   th32ModuleID = 0;           // associated exe
+    	INT   cntThreads = 0;
+    	INT   th32ParentProcessID = 0;    // this process's parent process
+    	INT    pcPriClassBase = 0;         // Base priority of process's threads
+    	INT   dwFlags = 0;
+    	BYTE  szExeFile[260] = "path"; // Path
+	}  
+	Process32First = Kernel32.api("Process32First","int(pointer hsnap,struct & lppe)");
+	Process32Next = Kernel32.api("Process32Next","int(pointer hsnap,struct & lppe)");
+	/*end intellisense*/
+	
+	//创建迭代器函数
+	each = function(exename) {
+    	exename ?= ..string.lower(exename) //exename = exename and string.lower(exename)
+    	var nextSnap,freeItor = eachSnap( 0,0x2/*_TH32CS_SNAPPROCESS*/,PROCESSENTRY32(),Process32First,Process32Next)
+    	
+	 
+		return function( entry ) { //接收for循环传递的参数得到迭代器控制变量 
+			entry = nextSnap( entry )
+			 	
+	    	while(entry){  
+	    		entry.szExeFile = ..string.str(entry.szExeFile);
+	        	if(!exename)
+	               	return entry; 
+	               	 
+	        	if( ..string.find( ..string.lower( entry.szExeFile ),exename)  )
+	               	return entry;
+	    	
+	    		entry = nextSnap(entry) ;
+	    	} 
+ 			
+		},freeItor   ;
+	
+	}
+	find = function(exename){
+		var p;
+		for entry in each(exename) { 
+			 p = ..process(entry.th32ProcessID);
+			 break;
+		} 
+		return p;
+	}
+	
+	getPath = function(pid){
+		var path;
+		for entry in eachModule(pid) { 
+			path = entry.szExePath;
+			break;
+		}
+		return ..string.str(path);
+	}
+	
+
+}
+
+ /**intellisense()
+ _PAGE_NOACCESS=@0x1/*_PAGE_NOACCESS*/
+_PAGE_READONLY=@0x2/*_PAGE_READONLY*/
+_PAGE_READWRITE=@0x4/*_PAGE_READWRITE*/
+_PAGE_WRITECOPY=@0x8/*_PAGE_WRITECOPY*/
+_PAGE_EXECUTE=@0x10/*_PAGE_EXECUTE*/
+_PAGE_EXECUTE_READ=@0x20/*_PAGE_EXECUTE_READ*/
+_PAGE_EXECUTE_READWRITE=@0x40/*_PAGE_EXECUTE_READWRITE*/
+_PAGE_EXECUTE_WRITECOPY=@0x80/*_PAGE_EXECUTE_WRITECOPY*/
+_PAGE_GUARD=@0x100/*_PAGE_GUARD*/
+_PAGE_NOCACHE=@0x200/*_PAGE_NOCACHE*/
+_PAGE_WRITECOMBINE=@0x400/*_PAGE_WRITECOMBINE*/
+_MEM_COMMIT=@0x1000/*_MEM_COMMIT*/
+_MEM_RESERVE=@0x2000/*_MEM_RESERVE*/
+_MEM_DECOMMIT=@0x4000/*_MEM_DECOMMIT*/
+_MEM_RELEASE=@0x8000/*_MEM_RELEASE*/
+_MEM_FREE=@0x10000/*_MEM_FREE*/
+_MEM_PRIVATE=@0x20000/*_MEM_PRIVATE*/
+_MEM_MAPPED=@0x40000/*_MEM_MAPPED*/
+_MEM_RESET=@0x80000/*_MEM_RESET*/
+_MEM_TOP_DOWN=@0x100000/*_MEM_TOP_DOWN*/
+_MEM_WRITE_WATCH=@0x200000/*_MEM_WRITE_WATCH*/
+_MEM_PHYSICAL=@0x400000/*_MEM_PHYSICAL*/
+_MEM_ROTATE=@0x800000/*_MEM_ROTATE*/
+_MEM_LARGE_PAGES=@0x20000000/*_MEM_LARGE_PAGES*/
+_MEM_4MB_PAGES=@0x80000000/*_MEM_4MB_PAGES*/
+_TH32CS_SNAPHEAPLIST=@0x1/*_TH32CS_SNAPHEAPLIST*/
+_TH32CS_SNAPPROCESS=@0x2/*_TH32CS_SNAPPROCESS*/
+_TH32CS_SNAPTHREAD=@0x4/*_TH32CS_SNAPTHREAD*/
+_TH32CS_SNAPMODULE=@0x8/*_TH32CS_SNAPMODULE*/
+_TH32CS_SNAPMODULE32=@0x10/*_TH32CS_SNAPMODULE32*/
+_TH32CS_SNAPALL=@0xF/*_TH32CS_SNAPALL*/
+_TH32CS_INHERIT=@0x80000000/*_TH32CS_INHERIT*/
+
+_STANDARD_RIGHTS_REQUIRED=@0xF0000/*_STANDARD_RIGHTS_REQUIRED*/
+_SYNCHRONIZE=@0x100000/*_SYNCHRONIZE*/
+_PROCESS_TERMINATE=@0x1/*_PROCESS_TERMINATE*/
+_PROCESS_CREATE_THREAD=@0x2/*_PROCESS_CREATE_THREAD*/
+_PROCESS_SET_SESSIONID=@0x4/*_PROCESS_SET_SESSIONID*/
+_PROCESS_VM_OPERATION=@0x8/*_PROCESS_VM_OPERATION*/
+_PROCESS_VM_READ=@0x10/*_PROCESS_VM_READ*/
+_PROCESS_VM_WRITE=@0x20/*_PROCESS_VM_WRITE*/
+_PROCESS_DUP_HANDLE=@0x40/*_PROCESS_DUP_HANDLE*/
+_PROCESS_CREATE_PROCESS=@0x80/*_PROCESS_CREATE_PROCESS*/
+_PROCESS_SET_QUOTA=@0x100/*_PROCESS_SET_QUOTA*/
+_PROCESS_SET_INFORMATION=@0x200/*_PROCESS_SET_INFORMATION*/
+_PROCESS_QUERY_INFORMATION=@0x400/*_PROCESS_QUERY_INFORMATION*/
+_PROCESS_SUSPEND_RESUME=@0x800/*_PROCESS_SUSPEND_RESUME*/
+_PROCESS_QUERY_LIMITED_INFORMATION=@0x1000/*_PROCESS_QUERY_LIMITED_INFORMATION*/
+_PROCESS_ALL_ACCESS=@0x1FFFFF/*_PROCESS_ALL_ACCESS*/
+
+_CREATE_NEW_CONSOLE=@0x10/*_CREATE_NEW_CONSOLE*/
+_CREATE_NEW_PROCESS_GROUP=@0x200/*_CREATE_NEW_PROCESS_GROUP*/
+_CREATE_NO_WINDOW=@0x8000000/*_CREATE_NO_WINDOW*/
+_CREATE_PROCESS_DEBUG_EVENT=@0x3/*_CREATE_PROCESS_DEBUG_EVENT*/
+_CREATE_SUSPENDED=@0x4/*_CREATE_SUSPENDED*/
+end intellisense**/
+
+
+
+/**intellisense()
+process.STARTUPINFO() = 创建进程启动参数
+?process.STARTUPINFO = !startinfo.
+process() = 打开当前进程,创建进程控制对象
+process(__/*进程ID*/) = 使用进程ID打开进程控制对象。
+process(__/*执行文件或关联文档*/) = 运行执行文件或关联文档。\n支持相对路径、系统目录相对路径、以斜杠开始表示应用程序根目录
+process(.(执行文件, 命令行参数,启动参数) = 运行执行文件或关联文档。\n也可以仅指定第二个参数运行纯命令行\n启动参数为process.STARTUPINFO()结构体,可选,\n可以使用普通table对象替代启动参数.将自动转换为STARTUPINFO结构体
+?process.find = !process.
+!process.free() = 释放进程对象。\n不是关闭进程，仅仅是释放对进程的控制句柄。
+!process.wait() = 等待进程关闭
+!process.query(.() = 查找下一个有效内存地址
+!process.query(.(内存地址) = 查找下一个有效内存地址
+!process.query(.(内存地址,保护类型) = 查找下一个有效内存地址
+!process.query(.(内存地址,保护类型,访问类型) = 查找下一个有效内存地址
+!process.query(.(内存地址,保护类型,访问类型,最小地址) = 查找下一个有效内存地址
+!process.query(.(内存地址,保护类型,访问类型,最小地址,最大地址) = 查找下一个有效内存地址
+!process.malloc(.(长度) = 在目标进程分配内存空间
+!process.malloc(.(长度,访问类型) = 在目标进程分配内存空间
+!process.malloc(.(长度,访问类型,分配类型) = 在目标进程分配内存空间
+!process.mfree(.(指针) = 释放malloc成员函数分配的内存指针
+!process.mfree(.(指针,释放长度,0x4000) = 释放malloc成员函数分配的内存指针\n不建议手工指定长度
+!process.setAffinity(1) = 指定进程运行的CPU内核
+!process.readNumber(__/*内存地址*/) = 读取一个int整数,32位
+!process.readNumber(__/*内存地址*/,"long") = 读取一个long类型整数,64位
+!process.readNumber(__/*内存地址*/,"word") = 读取一个word类型整数,16位
+!process.readNumber(__/*内存地址*/,"byte") = 读取一个字节,8位
+!process.readNumber(__/*内存地址*/,"INT") = 读取一个int整数,32位无符号
+!process.readNumber(__/*内存地址*/,"LONG") = 读取一个long类型整数,64位无符号
+!process.readNumber(__/*内存地址*/,"WORD") = 读取一个word类型整数,16位无符号
+!process.readNumber(__/*内存地址*/,"BYTE") = 读取一个字节,8位无符号
+!process.readString(.(内存地址,长度) = 读取定长字符串
+!process.readStruct(.(内存地址,结构体) = 读取定义的结构体
+!process.writeStruct(.(内存地址,结构体) = 写入定义的结构体
+!process.writeString(.(内存地址,字符串) = 写入字符串
+!process.writeNumber(__/*内存地址*/,0) = 写入一个int整数,32位
+!process.writeNumber(__/*内存地址*/,0,"long") = 写入一个long类型整数,64位
+!process.writeNumber(__/*内存地址*/,0,"word") = 写入一个word类型整数,16位
+!process.writeNumber(__/*内存地址*/,0,"byte") = 写入一个字节,8位
+!process.writeNumber(__/*内存地址*/,0,"INT") = 写入一个int整数,32位无符号
+!process.writeNumber(__/*内存地址*/,0,"LONG") = 写入一个long类型整数,64位无符号
+!process.writeNumber(__/*内存地址*/,0,"WORD") = 写入一个word类型整数,16位无符号
+!process.writeNumber(__/*内存地址*/,0,"BYTE") = 写入一个字节,8位无符号
+!process.getPriorityClass() = 返回进程优先级
+!process.setPriorityClass(0x80/*_HIGH_PRIORITY_CLASS*/) = 设置进程优先级
+!process.handle = 进程句柄
+!process.id = 进程ID
+!process.tid = 进程的主线程ID\n使用process类创建的进程才会有些属性
+!process.thandle = 进程的主线程句柄\n使用process类创建的进程才会有些属性
+!process.remoteApi("void()","User32","MessageBoxA" ) = 用法同 raw.remoteApi,但无需指定进程ID
+!process.terminate() = 强行终止进程
+!process.eachModule = @for moduleEntry in ??.eachModule() { \n__//io.print( moduleEntry.szExePath  )\n \n}
+!process.eachThread = @for threadEntry in ??.eachThread() { \n__//io.print( threadEntry.th32ThreadID  )\n \n}
+!process.getPath() = 返回执行程序文件完整路径
+?process = !process.
+?process.openWindow = !process.
+?process.each = !processEntry.
+end intellisense**/
+
+
+/**intellisense(process)
+execute(.("__", parameters="",operation="open",showCmd,workdir=",hwnd=0) = 运行exe应用程序
+execute_wait(.("__", parameters="",operation="open",showCmd,workdir=",hwnd=0) = 运行exe应用程序\n并等待应用程序关闭。
+explore_select("__/*文件路径*/") = 打开资源管理器,选定该文件
+findExe("__/*文件路径*/") = 查找文件关联的可执行程序
+find("__/*exe文件名*/") = 查找进程并返回进程对象
+kill("__/*exe文件名*/") = 查找同名exe文件的进程,并关闭进程
+each =  @for processEntry in process.each( ".*.exe" ) { \n//遍历所有进程\n	__//io.print( processEntry.szExeFile  )\n \n}
+eachModule =  @for moduleEntry in process.eachModule(__/*进程ID*/) { \n//io.print( moduleEntry.szExePath  )\n \n}
+eachThread =  @for threadEntry in process.eachThread(__/*进程ID*/) { \n//io.print( threadEntry.th32ThreadID  )\n \n}
+getPath(__/*进程ID*/) = 返回执行程序文件完整路径
+openWindow(__/*输入窗口句柄*/) = 使用窗口句柄打开进程ID
+getId() = 获取当前进程ID
+getHandle() = 获取当前进程伪句柄
+dup(.(句柄,源进程句柄,目标进程句柄) = 进程句柄参数省略则为当前进程句柄\n函数支持更多可选参数如下:\n(句柄,源进程,目标进程,是否可继承,选项,安全访问级别)\n默认可继承,选项默认为_DUPLICATE_CLOSE_SOURCE | _DUPLICATE_SAME_ACCESS\n如果不指定最后一个参数 
+dup(.(句柄,源进程句柄) = 从指定进程复制句柄到当前进程
+dup(.(句柄,,目标进程句柄) = 复制句柄到目标进程句柄
+end intellisense**/
+
+ 
+/**intellisense(!startinfo)
+desktop = 标识启动应用程序所在的桌面的名字
+title = 控制台标题
+x = x坐标(子进程使用默认坐标时、或控制台窗口支持)
+y = y坐标(子进程使用默认坐标时、或控制台窗口支持)
+xSize = 窗口宽(子进程使用默认坐标时、或控制台窗口支持)
+ySize = 窗口高(子进程使用默认坐标时、或控制台窗口支持)
+xCountChars = 控制台宽度(字符单位)
+yCountChars = 控制台高度(字符单位)
+fillAttribute = 控制台窗口使用的文本和背景颜色
+flags = @.flags = _STARTF_USE__ //指定结构体中哪些成员生效\n
+showWindow = 显示参数\n支持以_SW_前缀的常量\n_SW_HIDE表示隐藏窗口(默认值)
+stdInput = 标准输入(可用于创建管道)
+stdOutput = 标准输出(可用于创建管道)
+stdError = 标准错误输出(可用于创建管道) 
+creationFlag = @.creationFlag = CREATE__ //创建进程的参数，参考API CreateProcess的说明
+inheritHandles = 默认值为真，当前进程中的所有可继承的打开句柄都将被子进程继承。 
+environment = 新进程的环境块，以键值对组成的字符串表示，\n此参数一般不建议设置
+processAttributes = SECURITY_ATTRIBUTES结构体指针，一般不建议设置\n如需设置请使用raw.malloc将结构体转换为指针
+threadAttributess = SECURITY_ATTRIBUTES结构体指针，一般不建议设置\n如需设置请使用raw.malloc将结构体转换为指针
+workdir = 进程工作目录,一般不建议设置
+suspended = 是否休眠创建进程的主线程\n如果为真自动添加_CREATE_SUSPENDED参数
+end intellisense**/
+
+/*intellisense(!processEntry) 
+dwSize = 296;
+cntUsage = 0;
+th32ProcessID = 进程ID,INT数据类型
+th32DefaultHeapID =  
+th32ModuleID = associated exe
+cntThreads = 0;
+th32ParentProcessID = 父进程ID,INT数据类型
+pcPriClassBase = 进程优先级,INT数据类型
+dwFlags = 0;
+szExeFile = exe文件路径 
+end intellisense*/
+
+/*intellisense(moduleEntry)  
+dwSize = 结构体大小
+th32ModuleID = 模块ID;
+th32ProcessID = 进程ID,INT数据类型
+GlblcntUsage =  
+ProccntUsage =  
+modBaseAddr = 模块基址;
+modBaseSize = 
+hModule = 模块句柄
+szModule = 0;
+szExePath = 
+end intellisense*/
+
+/*intellisense(threadEntry)  
+dwSize = 结构体大小
+cntUsage = 
+th32ThreadID = this thread
+th32OwnerProcessID = Process this thread is associated with
+tpBasePri = 
+tpDeltaPri = 
+dwFlags = 
+end intellisense*/
+
+/*intellisense(heapEntry)  
+dwSize = 结构体大小;
+hHandle = Handle of this heap block
+dwAddress = Linear address of start of block
+dwBlockSize = Size of block in bytes
+dwFlags = 
+dwLockCount = 
+dwResvd = 
+th32ProcessID = owning process
+th32HeapID = heap block is in
+end intellisense*/
+
+/*intellisense(heapList)  
+dwSize = 结构体大小; 
+th32ProcessID = owning process
+th32HeapID = heap (in owning process's context!)
+dwFlags = 
+end intellisense*/
+
+
+ 
+
+ 
