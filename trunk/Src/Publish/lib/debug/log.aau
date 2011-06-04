@@ -1,0 +1,74 @@
+//调试日志
+import fsys;
+import process; 
+import debug;
+namespace debug.log
+ 
+var createTime = ..time.now();
+createTime.format="%Y-%m-%d %H-%M-%S";
+path = ..io.fullpath( 
+	"/log time=" + tostring(createTime) + " TID=" + ..thread.getId() + ".txt"
+)
+
+var file = ..io.open(path,"a+t")
+  
+var pre_code_file;
+var pre_func_name
+var pre_code_src;
+var code_file;
+var func_name
+var code_src;
+write = function( ... ){  
+	
+	if(!file)
+		return;
+	
+	var info = ..debug.queryinfo(2,"select source,name,currentline") 
+	var arg = {...}
+	
+	code_file = info.source.file 
+	if( code_file && code_file!=pre_code_file ){
+		file.write( "file:",code_file,'\n'); 
+		pre_code_file = code_file;
+	}
+	
+	code_src = info.source.src 
+	if( code_src!= pre_code_src ){
+		file.write( code_src,'\n'); 
+		pre_code_src = code_src;
+	}
+	
+	pre_func_name = info.name 
+	if( func_name && code_file!=pre_func_name ){
+		file.write( "Call:",func_name,'(...)\n'); 
+		pre_func_name = func_name;
+	}  
+		
+	file.write(  ..string.format("#%03d ",info.currentline ) );     
+	for(i=1;#arg ){
+		file.write( tostring(arg[i]):""," ") 
+	} 
+	file.write('\n')   
+}
+
+flush = function(){
+	return file.flush();
+} 
+
+close = function(){
+	if(!file)
+		return;
+	  
+	file.close();
+	file=null;
+	..io.print = io_print;
+	..process.execute( "wordpad.exe",..fsys.shortpath(path) ) 
+}
+
+
+/**intellisense(debug)
+log = 调试日志支持库 
+log.write("__") = 写入调试日志\n支持不定个数参数
+log.flush() = 将缓冲区数据写入到文件
+log.close() = 关闭并浏览日志; 
+end intellisense**/

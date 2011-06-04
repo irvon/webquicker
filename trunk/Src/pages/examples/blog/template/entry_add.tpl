@@ -32,7 +32,7 @@ tinyMCE.init({
 	theme_advanced_toolbar_align: "left",
 	theme_advanced_statusbar_location: "bottom",
 	theme_advanced_resizing: true,
-	content_css: "css/content.css",
+	content_css: "{baseurl}/template/style/common.css",
 	template_external_list_url: "lists/template_list.js",
 	external_link_list_url: "lists/link_list.js",
 	external_image_list_url: "lists/image_list.js",
