@@ -119,6 +119,7 @@ accept = function (hSocket) {
 		if (!io.exist("/pages" + path + ".aau")) {
 			err_404();
 		} else {
+			loadcode("/res/standard.aau")("/pages" + path + ".aau");
 			var SetCurrentDirectory = ::Kernel32.api("SetCurrentDirectory", "int(string)");
 			SetCurrentDirectory(io.fullpath("/pages/"));
 			var func, err = loadcode("/pages/" + path + ".aau");
@@ -220,7 +221,7 @@ accept = function (hSocket) {
 		}
 	}
 		
-	// 如果非大文件，则采用一次性发送的形式
+	// 如果非后台脚本文件，则采用一次性发送的形式
 	if (!flag) {
 		response.flush();
 	}

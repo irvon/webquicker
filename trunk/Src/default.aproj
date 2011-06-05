@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="gb2312"?>
 <project ver="0.60" name="WebQuicker" libEmbed="false" icon="...">
 	<file name="main.aau" path="main.aau"/>
-	<folder name="资源文件" path="res" embed="true"/>
+	<folder name="资源文件" path="res" embed="true">
+		<file name="standard.aau" path="res\standard.aau" comment="res\standard.aau"/>
+	</folder>
 </project>
