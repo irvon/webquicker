@@ -2,6 +2,9 @@
 WebQuicker:
 1. 增加 include() 方法，与 loadcode() 的不同之处在于：调用 include() 之后，代码会自动执行；include() 中的路径相对的是主脚本所在的文件夹，而 loadcode() 相对的是网站根目录
 2. 调用 include() 方法后，被调用的页面可以接受传参，传参为被调用页面的自身路径
+3. 修改 include 方法，修正对相对路径处理不当的 BUG
+4. 被 include() 调用的脚本文件可用 owner 代替 ... 获取自身文件路径
+   详见 pages/tests/include
 
 2011-6-4 0.1c
 WebQuicker:
