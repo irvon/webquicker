@@ -119,12 +119,12 @@ accept = function (hSocket) {
 		if (!io.exist("/pages" + path + ".aau")) {
 			err_404();
 		} else {
-			loadcode("/res/standard.aau")("/pages" + path + ".aau");
+			loadcode("/res/standard.aau")(io.fullpath("/pages" + path + ".aau"));
 			var SetCurrentDirectory = ::Kernel32.api("SetCurrentDirectory", "int(string)");
 			SetCurrentDirectory(io.fullpath("/pages/"));
 			var func, err = loadcode("/pages/" + path + ".aau");
 			if (func) {
-				func(info, response);
+				func();
 			} else {
 				err_500(err or "Unknown");
 			}

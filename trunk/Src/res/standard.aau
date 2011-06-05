@@ -3,18 +3,16 @@ import fsys;
 var aau_path = ...;
 
 include = function (path) {
-	if (!io.exist(path)) {
-		// 如果提供的是相对路径，则处理
-		if (string.startWith(path, "/")) {
-			path = "/pages" + path;
-		} else {
-			path = fsys.joinpath(io.splitpath(aau_path).dir, path);
-		}
+	if (string.startWith(path, "/")) {
+		path = fsys.joinpath(io.fullpath("/pages/"), path);
+	} elseif (string.sub(path, 2, 2) != ":") {
+		// 相对路径
+		path = fsys.joinpath(io.splitpath(aau_path).dir, path);
 	}
 	var func, err = loadcode(path);
 	if (!func) {
 		response.write(err);
 	} else {
-		func(path);
+		call(func, path);
 	}
 }
