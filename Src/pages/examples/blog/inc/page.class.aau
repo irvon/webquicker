@@ -2,8 +2,7 @@
 
 _baseurl = "/examples/blog";
 
-loadcode("examples/blog/inc/nav.function.aau")();
-loadcode("examples/blog/inc/admin.class.aau")();
+load_class("nav.function", "admin.class");
 
 replace_tags = function (str) {
 	if (string.find(str, "{baseurl}")) {

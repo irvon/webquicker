@@ -1,7 +1,5 @@
-loadcode("examples/blog/inc/page.class.aau")(); // 页面管理
-loadcode("examples/blog/inc/admin.class.aau")(); // 管理员操作
-loadcode("examples/blog/inc/entry.function.aau")(); // 文章管理
-loadcode("examples/blog/inc/catalog.function.aau")(); // 分类管理
+include("inc/common.aau");
+load_class("page.class", "admin.class", "entry.function", "catalog.function");
 
 // 检查是否登录
 var admin = class_admin();

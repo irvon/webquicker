@@ -1,6 +1,6 @@
 /* 管理员操作类 */
 
-loadcode("examples/blog/inc/db.class.aau")();
+load_class("db.class");
 
 class_admin = class {
 	ctor () {

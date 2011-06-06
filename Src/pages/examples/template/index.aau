@@ -1,0 +1,32 @@
+include("inc/template.inc.aau"); // 引入模板类
+
+日程 = {
+	{
+		时间 = "6:00";
+		事件 = "吃早饭";
+	};
+	{
+		时间 = "6:30";
+		事件 = "上学";
+	};
+	{
+		时间 = "17:00";
+		事件 = "到家";
+	};
+	{
+		时间 = "22:00";
+		事件 = "睡觉";
+	};
+}
+
+var tpl = template(io.splitpath(owner).dir + "/template");
+tpl.set_file("index", "index.tpl");
+tpl.set_var("title", "我是标题");
+tpl.set_block("index", "li", "nli");
+for (i = 1; #日程) {
+	tpl.set_var("timetable_time", 日程[i].时间);
+	tpl.set_var("timetable_event", 日程[i].事件);
+	tpl.parse("nli", "li", true);
+}
+tpl.parse("indexes", "index");
+tpl.p("indexes");

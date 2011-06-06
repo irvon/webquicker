@@ -1,3 +1,9 @@
+2011-6-6 0.1c
+WebQuicker:
+1. 增加 response.close 方法，尚在测试中，慎用
+Web:
+1. 翻译 PHPLib Template 库，详见 pages/examples/template/
+
 2011-6-5 0.1c
 WebQuicker:
 1. 增加 include() 方法，与 loadcode() 的不同之处在于：调用 include() 之后，代码会自动执行；include() 中的路径相对的是主脚本所在的文件夹，而 loadcode() 相对的是网站根目录

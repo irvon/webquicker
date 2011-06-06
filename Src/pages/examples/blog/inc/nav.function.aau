@@ -1,7 +1,6 @@
 /* 栏目操作 */
 
-loadcode("examples/blog/inc/db.class.aau")();
-loadcode("examples/blog/inc/catalog.function.aau")();
+load_class("db.class", "catalog.function");
 
 // 获取栏目列表（替换 {nav_list}）
 get_nav_list = function (selected = "index") {

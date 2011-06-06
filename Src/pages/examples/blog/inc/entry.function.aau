@@ -1,6 +1,6 @@
 /* ндуб╧эюМ */
 
-loadcode("examples/blog/inc/db.class.aau")();
+load_class("db.class");
 
 format_entry = function (temp, entry) {
 	var entry_t = table.copy(entry);

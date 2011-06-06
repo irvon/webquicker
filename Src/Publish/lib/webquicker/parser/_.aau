@@ -86,9 +86,14 @@ response = class {
 		this.body = "";
 		
 		this.cookie = {};
+		
+		this.closed = false;
 	}
 	
 	write = function (str) {
+		if (this.closed) {
+			return false;
+		}
 		this.body = this.body ++ tostring(str);
 		if (#this.body > 65000) {
 			this.flush();
@@ -96,6 +101,9 @@ response = class {
 	}
 	
 	flush = function () {
+		if (this.closed) {
+			return false;
+		}
 		if (this.header) {
 			var responseHeader = this.makeResponseHeader();
 			..wsock.send(hSocket, responseHeader, #responseHeader, 0);
@@ -163,6 +171,11 @@ response = class {
 		var str = this.makeResponseHeader();
 		str = str ++ this.body;
 		return str;
+	}
+	
+	close = function () {
+		this.flush();
+		this.closed = true;
 	}
 	
 	// Ôª±í

@@ -1,6 +1,6 @@
 /* ·ÖÀà²Ù×÷ */
 
-loadcode("examples/blog/inc/db.class.aau")();
+load_class("db.class");
 
 get_catalog_list = function (order) {
 	var db = class_db();
