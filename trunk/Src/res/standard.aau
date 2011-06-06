@@ -2,7 +2,7 @@ import fsys;
 
 var aau_path = ...;
 
-include = function (path) {
+include = function (path, ...) {
 	if (string.startWith(path, "/")) {
 		path = fsys.joinpath(io.fullpath("/pages/"), path);
 	} elseif (string.sub(path, 2, 2) != ":") {
@@ -13,6 +13,6 @@ include = function (path) {
 	if (!func) {
 		response.write(err);
 	} else {
-		call(func, path);
+		call(func, path, ...);
 	}
 }

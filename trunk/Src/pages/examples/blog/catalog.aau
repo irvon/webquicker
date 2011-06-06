@@ -1,5 +1,5 @@
-loadcode("examples/blog/inc/page.class.aau")(); // 页面管理
-loadcode("examples/blog/inc/entry.function.aau")(); // 文章管理
+include("inc/common.aau");
+load_class("page.class", "entry.function");
 
 var catalog_id = tonumber(request.get[["id"]] or "");
 var ret, catalog = is_catalog_exist(catalog_id);

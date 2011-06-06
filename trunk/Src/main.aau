@@ -124,7 +124,10 @@ accept = function (hSocket) {
 			SetCurrentDirectory(io.fullpath("/pages/"));
 			var func, err = loadcode("/pages/" + path + ".aau");
 			if (func) {
-				func();
+				var ok, err = call(func, io.fullpath("/pages/" + path + ".aau"));
+				if (!ok) {
+					err_500(err or "Unknown");
+				}
 			} else {
 				err_500(err or "Unknown");
 			}
@@ -222,7 +225,7 @@ accept = function (hSocket) {
 	}
 		
 	// 如果非后台脚本文件，则采用一次性发送的形式
-	if (!flag) {
+	if (!flag && !response.closed) {
 		response.flush();
 	}
 	

@@ -1,7 +1,7 @@
 import string.md5;
 
-loadcode("examples/blog/inc/page.class.aau")(); // 页面管理
-loadcode("examples/blog/inc/admin.class.aau")(); // 管理员操作
+include("../inc/common.aau");
+load_class("page.class", "admin.class");
 
 var action = request.get[["action"]] or "";
 if (action == "login") {
