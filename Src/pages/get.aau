@@ -1,7 +1,0 @@
-var ret = /*
-<h2>GET 测试</h2>
-<p>username 参数为：%s</p>
-<p><a href="index.aau">返回</a></p>
-*/
-
-response.write(string.format(ret, request.get["username"] or ""));

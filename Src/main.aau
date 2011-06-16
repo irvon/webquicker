@@ -81,14 +81,29 @@ serviceHandler = function (fdwControl) {
 
 // 服务函数
 startService = function () {
+	import fsys.ini;
+	// 读取配置文件
+	settings = {};
+	var ini = fsys.ini("/config/config.ini");
+	settings["port"] = tonumber(ini.read("Settings", "Port", "80"));
+	settings["maxThreadCount"] = tonumber(ini.read("Settings", "MaxThreadCount", "20"));
+	settings["wwwroot"] = ini.read("Settings", "DocumentDirectory", "/public_html/");
+	debug.log.write(table.tostring(settings));
+	
 	import webquicker.server;
-	webserver = webquicker.server();
-	webserver.start(80, accept);
-	return true;
+	webserver = webquicker.server(settings["maxThreadCount"]);
+	var hasError = false;
+	try {
+		webserver.start(settings["port"], accept);
+	} catch (e) {
+		hasError = true;
+	}
+	return !hasError;
 }
 
 // 处理函数（在子线程中）
-accept = function (hSocket) {
+accept = function (hSocket, settings) {
+	import fsys;
 	import fsys.file;
 	import webquicker.parser;
 	
@@ -116,15 +131,16 @@ accept = function (hSocket) {
 	
 	// 执行 aau
 	loadPage = function (path) {
-		if (!io.exist("/pages" + path + ".aau")) {
+		var realPath = fsys.joinpath(io.fullpath(settings["wwwroot"]), path + ".aau");
+		if (!io.exist(realPath)) {
 			err_404();
 		} else {
-			loadcode("/res/standard.aau")(io.fullpath("/pages" + path + ".aau"));
+			loadcode("/res/standard.aau")(realPath);
 			var SetCurrentDirectory = ::Kernel32.api("SetCurrentDirectory", "int(string)");
-			SetCurrentDirectory(io.fullpath("/pages/"));
-			var func, err = loadcode("/pages/" + path + ".aau");
+			SetCurrentDirectory(io.fullpath(settings["wwwroot"]));
+			var func, err = loadcode(realPath);
 			if (func) {
-				var ok, err = call(func, io.fullpath("/pages/" + path + ".aau"));
+				var ok, err = call(func, realPath);
 				if (!ok) {
 					err_500(err or "Unknown");
 				}
@@ -139,11 +155,11 @@ accept = function (hSocket) {
 	if (info.requireRedirect) {
 		response.redirect(info.url);
 	} else {
-		// 自动寻找首页	
+		// 自动寻找首页
 		if (string.endWith(info.url, "/")) {
 			// 严格按照顺序
 			for (i = 1; #webquicker.parser.indexes) {
-				if (io.exist(io.fullpath("/pages" + info.url + webquicker.parser.indexes[i]))) {
+				if (io.exist(fsys.joinpath(io.fullpath(settings["wwwroot"]), info.url + webquicker.parser.indexes[i]))) {
 					info.url += webquicker.parser.indexes[i];
 					break;
 				}
@@ -151,7 +167,7 @@ accept = function (hSocket) {
 		}
 		
 		// 防止 ../ 读取到 Web 根目录以外的文件
-		if (!string.startWith(io.fullpath("/pages" + info.url), io.fullpath("/pages/"))) {
+		if (!string.startWith(fsys.joinpath(io.fullpath(settings["wwwroot"]), info.url), io.fullpath(settings["wwwroot"]))) {
 			err_404();
 		} else {
 			var tpath = io.splitpath(info.url);
@@ -172,7 +188,7 @@ accept = function (hSocket) {
 				}
 				
 				// 打开文件
-				var file = fsys.file("/pages/" + info.url);
+				var file = fsys.file(fsys.joinpath(io.fullpath(settings["wwwroot"]), info.url));
 				if (file) {
 					// 最后修改日期
 					var fileTime = file.getFileTimes();
@@ -214,7 +230,7 @@ accept = function (hSocket) {
 						flag = true;
 					}
 				} else {
-					if (!string.endWith(info.url, "/") && io.exist("/pages/" + info.url + "/")) {
+					if (!string.endWith(info.url, "/") && io.exist(fsys.joinpath(io.fullpath(settings["wwwroot"]), info.url + "/"))) {
 						response.redirect(info.url + "/");
 					} else {
 						err_404();
