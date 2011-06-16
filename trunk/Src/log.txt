@@ -1,3 +1,6 @@
+2011-6-16 0.1c
+1. 加入 config/config.ini 文件，以配置 WebQuicker 运行参数
+
 2011-6-6 0.1c
 WebQuicker:
 1. 增加 response.close 方法，尚在测试中，慎用

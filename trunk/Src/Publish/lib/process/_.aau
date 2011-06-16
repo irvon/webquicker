@@ -564,6 +564,9 @@ namespace process{
 	
 	}
 	find = function(exename){
+		var tpath = ..io.splitpath(exename)
+		exename = tpath.file;
+		
 		var p;
 		for entry in each(exename) { 
 			 p = ..process(entry.th32ProcessID);

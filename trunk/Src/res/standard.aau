@@ -4,7 +4,7 @@ var aau_path = ...;
 
 include = function (path, ...) {
 	if (string.startWith(path, "/")) {
-		path = fsys.joinpath(io.fullpath("/pages/"), path);
+		path = fsys.joinpath(io.fullpath(settings["wwwroot"]), path);
 	} elseif (string.sub(path, 2, 2) != ":") {
 		// Ïà¶ÔÂ·¾¶
 		path = fsys.joinpath(io.splitpath(aau_path).dir, path);
@@ -15,4 +15,15 @@ include = function (path, ...) {
 	} else {
 		call(func, path, ...);
 	}
+}
+
+// php-like function
+print = response.write;
+
+echo = print;
+
+sprintf = string.format;
+
+printf = function (...) {
+	print(sprintf(...));
 }
