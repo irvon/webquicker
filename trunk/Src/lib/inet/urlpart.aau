@@ -1,3 +1,4 @@
+//urlpart ÍøÖ·²ğ·Ö
 namespace inet.urlpart;
  
 ::Shlwapi := ..raw.loadDll("Shlwapi.dll");

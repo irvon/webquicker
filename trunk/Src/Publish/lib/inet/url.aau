@@ -4,7 +4,7 @@ namespace inet.url;
 is  = Shlwapi.api("UrlIsA", "bool(str url,int urlis)" )
  /**intellisense()
 _URLIS_URL=@0x0/*_URLIS_URL*/
-_URLIS_OPAQUE=@//是否Opaque URL,如邮件地址\n0x1/*_URLIS_OPAQUE*/
+_URLIS_OPAQUE=@//是否Opaque URL,如邮件地址,Javascript脚本\n0x1/*_URLIS_OPAQUE*/
 _URLIS_NOHISTORY=@//URL是否未曾访问过\n0x2/*_URLIS_NOHISTORY*/
 _URLIS_FILEURL=@//是否指向本机文件\n0x3/*_URLIS_FILEURL*/
 _URLIS_APPLIABLE=@//检测URL指定的协议是否可用\n0x4/*_URLIS_APPLIABLE*/ 
@@ -26,10 +26,10 @@ canonicalize = function(url,flag=0){
 		return url;
 }
 /**intellisense(inet.url)
-joinpath("当前URL",相对路径) = 当对于当前URL的相对路径转换为完整URL
+joinpath("当前URL",相对路径) = 当对于当前URL的相对路径转换为完整URL\n如果是外部链接则返回该链接
 joinpath("当前URL",相对路径,_URL__) = 当对于当前URL的相对路径转换为完整URL\n参数三指定转换选项
 canonicalize(__/*URL*/) = URL规范化转换\n扩展和适当置换路径中包含的所有..和.
-canonicalize("当前URL",相对路径,_URL__) = URL规范化转换\n参数三指定转换选项
+canonicalize("当前URL",_URL__) = URL规范化转换\n参数三指定转换选项
 end intellisense**/
 
 HashData  = Shlwapi.api("HashData", "int(str data,INT cbData,string &hash,INT cbHash)" )

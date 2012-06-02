@@ -1,0 +1,7 @@
+_BASEPATH = dirname(owner);
+include(_BASEPATH + "/core/common.aau");
+
+tpl.set_var("blog_title", system.blog_title);
+tpl.set_var("blog_keywords", system.blog_keywords);
+tpl.set_var("blog_description", system.blog_description);
+tpl.pp("header");

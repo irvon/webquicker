@@ -187,33 +187,26 @@ close = function(){
 		 WSACleanup(); 
 }
 
-/*
-//用法示例
-import wsock;
-io.open()
 //可返回一个或多个IP
-io.print( wsock.getIp("www.baidu.com") )
-*/
-getIp = function(domain)begin
+getIp = function(domain) begin
     //将域名转换为IP地址
 	if(sockopen_count<=0) 
      	self.open();
     
 	var h = gethostbyname(domain);
+	if(!h)return;
 	
 	var entity = ..raw.convert(h,hostent());
 	
-	select( entity.h_addrtype ) {
-	
-		case 0x2/*_AF_INET*/,23/*_AF_INET6 */
-		{  
+	select( entity.h_addrtype ) { 
+		case 0x2/*_AF_INET*/,23/*_AF_INET6 */ {  
 	    	//创建动态数组
 	    	var addrlist = ..raw.toarray( entity.h_length,"pointer" )  
 	    	
 	    	//将指针转换为数组值, raw.convert类似(&)取值操作符
 	    	..raw.convert(entity.h_addr_list,addrlist);//得到的是一个数组，数组的元素是in_addr*指针，实际上就是int *指针
 	    	
-	    	var ipstr = {};
+	    	var tiplist = {};
 	    	for(i=1;entity.h_length;1){
 	       		var int_addr_ptr = addrlist.array[i];
 	       		if(!int_addr_ptr)
@@ -221,18 +214,18 @@ getIp = function(domain)begin
 	       		
 	        	//将指针转换为值，这句类似C++里的 int int_addr = *((int *)int_addr_ptr)
 	       		var int_addr = ..raw.convert( int_addr_ptr, {int addr} ) 
-	       		..table.insert( ipstr ,inet_ntoa(int_addr.addr) )
+	       		var ip = inet_ntoa(int_addr.addr);
+	       		if( ip != dnsPollution )
+	       			..table.insert( tiplist ,ip )
 	    	}
 	     	
-	    	return ..table.unpack(ipstr);
-		}
-		else
-		{
-		}
-	
-	}
-	return null;
+	    	return ..table.unpack(tiplist);
+		} 
+	} 
 end
+
+//返DNS劫持
+dnsPollution = getIp( ..string.format("%s.%s.com",..string.random(20),..string.random(20) ) );
 
 /**intellisense(wsock)
 open() = 使用wsock库以前必须调用此函数注册

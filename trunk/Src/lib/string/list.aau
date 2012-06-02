@@ -1,69 +1,97 @@
+//list 字符串列表 
 namespace string  
 import util.metaProperty
  
 class list{ 
-    ctor(str,sep='\r\n',eq='=') { 
-        this[_SEP] = sep;
-        this[_EQ] = eq;
-
-        if(..io.exist(str) )
+    ctor(str,separator='\r\n',mark='=') {  
+    	var path;
+    	
+        if(..io.exist(str) ){
         	str = ..string.load(str);
+        	path = str;
+        }
         
         if(str)	
-       		createList(this,str,sep,eq);
+       		createList(this,str,separator,mark);
     };
      
-    @metaProperty
+    @..table.mixin( _metaProperty, {
+    	separator = {
+    		_get = function(){
+    			return separator
+    		};
+    		_set = function(v){
+    			separator = v;
+    		} 
+    	}
+    	mark = {
+    		_get = function(v){
+    			return mark
+    		};
+    		_set = function(v){
+    			mark = v;
+    		}
+    	}
+    	path = {
+    		_get = function(v){
+    			return path
+    		};
+    		_set = function(v){
+    			path = v;
+    		}
+    	}
+    } );
 }
 
 namespace list{  
-
-	_SEP = -1;
-	_PATH = -2;
-	_EQ = -3;
+	import string; 
 	
-	import string;
-	
-	createList = function(this,str="",sep,eq){ 
+	var push = ..table.push
+	var trim = ..string.trim;
+	var find = ..string.find;
+	var left = ..string.left;
+	var sub = ..string.sub;
+	createList = function(this,str="",separator,mark){ 
 		var k; 
-		var tlist = string.split(str,sep);
-    	for( i,v in tlist){  
-        	pos = string.find(v,eq);
-        	if(pos){ 
-        		k = string.trim(string.left(v,pos-1));
-        		if( this[k]===null ){
-        			..table.push(this,k ); 
-        		}
-        		this[[k]] = string.trim( string.sub(v,pos+1) ); 
-        	}
+		var tlist = string.split(str,separator);
+		var f,t,t2;  
+    	for( i,v in tlist){ 
+    		if( ! #v ) continue; 
+        	f,t = find(v,mark); 
+        	
+        	if(f){ 
+        		k = trim(left(v,f-1));  
+        		if( !this[k] )push(this,k);
+        		this[[k]] = trim( sub(v,t+1),' \t\'"' );  
+        	} 
     	}  	
 	}	 
 	
-	metaProperty = ..util.metaProperty( 
+	_metaProperty = ..util.metaProperty( 
 		save = function(filepath){ 
 			if(filepath)
-				owner[[_PATH]] = filepath;  
+				owner.path = filepath;  
 			
-    		..string.save(owner[[_PATH]] ,tostring(owner) )   
+    		..string.save(owner.path ,tostring(owner) )   
+    		return owner;
     	}
     	load = function(filepath){  
     		if( ! #filepath ){
     			error("请指定正确的文件路径",2)
-    		}
-    		var sep = owner[[_SEP]];
-    		var eq = owner[[_EQ]]; 
-    		for(k,v in owner ){
+    		}  
+    		for( k,v in owner ){
     			owner[[k]] = null; 
-    		} 
-    		owner[[_PATH]] = filepath;
-       		owner[[_EQ]] = eq
-       		owner[[_SEP]] = sep; 
-    	 	
+    		}  
     		var str = ..string.load( filepath ) 
-       		
-       		createList(owner,str,sep,eq);  
-    	}
+       		owner.path = filepath; 
+       		createList(owner,str,owner.separator,owner.mark);  
+       		return owner;
+    	};
+    	mixin = function(...){
+    		return ..table.mixin(owner,...);
+    	};
 		set = function(k,v) {   
+			k = tostring(k)
 			if( owner[[k]] === null )
 				..table.push(owner,k) 
 				
@@ -80,31 +108,37 @@ namespace list{
 			var this = owner;
 			return function(i=0){
 				i++;
-				var k = this[i];
+				var k = this[i]; 
 				return k?i,k,this[k]
 			} 
 		} 
 		_tostring = function() {
 			if(  not #owner ) return "";
- 			var eq = owner[_EQ]
+ 			var mark = owner.mark
 			var t ={}
 			for( i= 1 ; #owner){
-    			..table.push(t, ..string.concat( owner[i],eq,owner[owner[i] ] ) );
+    			..table.push(t, ..string.concat( owner[i],mark,tostring( owner[owner[i] ] ) ) );
 			} 
-			return ..string.join(t,owner[_SEP]) ;
+			return ..string.join(t,owner.separator) ;
 		};
 	)
 }
  
 
 /**intellisense()
-string.list(__/*请输入字符串*/) = 创建字符串列表\n可选参数(字符串,分隔符,键值对分隔符)
-!stringlist.load("__/*文件路径*/") = 加载配置文件
+string.list = 字符串列表
+string.list(__/*请输入字符串*/) = 创建字符串列表\n可选参数(字符串,分隔符,键值对分隔符)\n第一个参数也可以是文件路径.
+!stringlist.load("__/*文件路径*/") = 加载配置文件 
 !stringlist.save("__/*文件路径*/") = 保存配置文件
-!stringlist.save() = 保存配置文件
+!stringlist.save() = 保存配置文件\n!stringlist.
+!stringlist.mixin = @.mixin(\n	键 = 值__;\n)
 !stringlist.find("__/*键名*/") = 查找指定键所在位置
+!stringlist.separator = 分隔符,默认为回车换行
+!stringlist.mark = 分隔键值对的符号,默认为等号
 !stringlist.each = @for i,k,v in ??.each() { 
 	io.print("顺序:"+i,"名字:"+k,"值:"+v )__ 
 }
 ?string.list = !stringlist.
+string.list() = !stringlist.
+!stringlist.load() = !stringlist.
 end intellisense**/

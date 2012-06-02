@@ -1,3 +1,4 @@
+//parser HTML·ÖÎö
 namespace web.parser;
 
 isUtf8 = function(html){
@@ -6,8 +7,8 @@ isUtf8 = function(html){
 }
 
 getTitle = function(html){
-   var p = "\<<title>|<TITLE>\>(.+?)\</<title>|<TITLE>\>"
-   return  ..string.match( str, p)
+   var p = "\<<title>|<TITLE>\>(.+?)\</<title>|<TITLE>\>" 
+   return  ..string.match( html, p)
 }
 
 /**intellisense(web.parser)

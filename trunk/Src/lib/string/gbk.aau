@@ -1,4 +1,4 @@
-//中文字符串增强支持库
+//gbk 中文处理
 import  string.mbcs;
 namespace string
 
@@ -97,4 +97,6 @@ namespace gbk{
 string.gbk.toPinyin(__) = 汉字转拼音,可选使用第二个参数指定分隔符
 ?string.gbk = !mbcs.
 string.gbk = 中文字符串增强支持库
+string.gbk("__") = 创建宽字符串对象 
+string.gbk() = !mbcs.
 end intellisense**/

@@ -1,0 +1,19 @@
+echo("<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv=""Content-Type"" content=""text/html;charset=gb2312"" />
+<title>后台提交测试</title>
+</head>
+<body>
+");
+
+echo("<h2>GET</h2>
+");
+
+for (k, v in request.get) {
+	echo(k + ": " + v + "<br />
+");
+}
+
+echo("</body>
+</html>");

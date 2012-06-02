@@ -1,0 +1,15 @@
+if (!_BASEPATH) exit("No direct script access allowed");
+
+absystem = class {
+	@ {
+		_get = function (k) {
+			var result = ..db.query("SELECT `id`,`key`,`value` FROM " + _DB_PREFIX + "system 
+				WHERE `key`='" + ..db.escape_string(k) + "'");
+			
+			var row = result.fetch_array();
+			if (row) {
+				return row["value"];
+			}
+		}
+	}
+}

@@ -1,0 +1,22 @@
+if (!_BASEPATH) exit("No direct script access allowed");
+
+import mysql;
+
+abdb = class {
+	ctor () {
+		this = ..mysql();
+	}
+	
+	connect = function () {
+		this.real_connect(_DB_HOST, _DB_USER, _DB_PASSWORD, _DB_NAME, _DB_PORT);
+		if (!this.handle) {
+			this.halt("无法连接到 MySQL 服务器!");
+		}
+		this.query("SET NAMES " + _DB_CHARSET);
+	}
+	
+	halt = function (msg) {
+		var errHandler = ..aberror(msg);
+		errHandler.show();
+	}
+}

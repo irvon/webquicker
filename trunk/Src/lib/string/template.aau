@@ -1,0 +1,20 @@
+//template 模板
+namespace string;
+
+class template{
+	ctor( strTemplate,pattern = "\$\{(.+?)\}"){
+	
+	}; 
+	format = function(args){
+		return ..string.replace(strTemplate,pattern,args )
+	} 
+}
+
+/**intellisense()
+string.template = 字符串模板
+string.template(.(模板字符串)
+string.template(.(模板字符串,模板匹配规则) = 可选使用模式匹配语法指定参数匹配规则\n默认匹配规则为"\$\{(.+?)\}",匹配形如 ${参数名} 的参数
+?string.template = !string_template.
+string.template() = !string_template.
+!string_template.format = @.format(\n	参数名 = 值__/*可选指定任意多个参数键值对用于替换模板参数*/;\n)
+end intellisense**/

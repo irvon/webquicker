@@ -1,5 +1,5 @@
-namespace string.base64;
-
+//base64 编码
+namespace string.base64; 
 
 //base64编码表
 var c64 =  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";   
@@ -29,10 +29,8 @@ var m64 = {
     255; 255; 255; 255; 255; 255; 255; 255; 255; 255; 255; 255;   
     255; 255; 255; 255   
 };    
-  
-//频繁使用的对象，放到局部变量中速度更快
-var push = ..table.push;
 
+var push = ..table.push;
 encode  = function (  s  ){
     var p = {};
     var ln = #s;

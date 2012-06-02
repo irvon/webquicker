@@ -4,10 +4,10 @@ namespace fsys;
 ::Shell32 := ..raw.loadDll("Shell32")
  
 SetCurrentDirectory := ::Kernel32.api( "SetCurrentDirectory", "int(string path )"); 
-GetCurrentDirectory := ::Kernel32.api( "GetCurrentDirectory", "INT(INT nBufferLength, string & lpBuffer )"); 
-GetSystemDirectory := ::Kernel32.api( "GetSystemDirectoryA", "int(string &str,int size )"); 
-GetWindowsDirectory := ::Kernel32.api( "GetWindowsDirectoryA", "int(string &str,int size )");
-GetTempPath := ::Kernel32.api( "GetTempPathA", "int(int size ,string &str)");  
+GetCurrentDirectory := ::Kernel32.api( "GetCurrentDirectory", "INT(INT nBufferLength, str & lpBuffer )"); 
+GetSystemDirectory := ::Kernel32.api( "GetSystemDirectoryA", "int(str &str,int size )"); 
+GetWindowsDirectory := ::Kernel32.api( "GetWindowsDirectoryA", "int(str &str,int size )");
+GetTempPath := ::Kernel32.api( "GetTempPathA", "int(int size ,str &str)");  
 FindFirstFile := ::Kernel32.api("FindFirstFileA", "int(string,struct&)") 
 FindNextFile := ::Kernel32.api("FindNextFileA", "int(int,struct&)") 
 FindClose := ::Kernel32.api("FindClose", "int(int)") 
@@ -21,6 +21,8 @@ longpath = function(path){
 }
 
 shortpath = function(path){
+	if(!path)
+		error("fsys.shortpath()参数不能为空",2)
 	if(!..string.indexAny(path,"/\"))
 		return path;
 	var len,path = GetShortPathName( ..io.fullpath(path) ,0x104/*_MAX_PATH*/,0x104/*_MAX_PATH*/);
@@ -38,26 +40,26 @@ joinpath = function(dir,path){
  
 getCurDir = function(){
 	var re,str = GetCurrentDirectory(0x104,0x104) //_MAX_PATH = 0x104
-	return ..string.str( str );
+	return str;
 }
 
-setCurDir = function(dir){
-	return SetCurrentDirectory(dir);
+setCurDir = function(dir){ 
+	return SetCurrentDirectory( ..io.fullpath(dir) );
 }
 
 getSysDir = function(){
 	var re,str = GetSystemDirectory(0x104,0x104) //_MAX_PATH = 0x104
-	return ..string.str( str );
+	return str;
 }
 
 getWinDir = function(){
 	var re,str = GetWindowsDirectory(0x104,0x104)
-	return ..string.str( str );
+	return str;
 }
 
 getTempDir = function(){
 	var re,str = GetTempPath(0x104,0x104)
-	return ..string.str( str );
+	return str;
 }
 
 var CreateDirectoryApi = ::Kernel32.api("CreateDirectoryA", "int(string lpPathName,pointer lpSecurityAttributes)");
@@ -90,14 +92,23 @@ createParentDir = function(strDir){
 	createDir( getParentDir(strDir) );
 }
 
-searchFile = function(filename,dir){
-	if( dir ){
-		return  ..io.exist(joinpath(dir,filename))
+searchFile = function(filename,...){
+	if( ... ){ 
+		var dir = {...}
+		var path;
+		for(i=1;#dir ){
+			path = joinpath(dir[i],filename)
+			if( ..io.exist(path ) )
+				return path;
+		} 
 	} 
-	return searchFile( filename, ..io.localpath("\"))
-		|| searchFile( filename,getCurDir() ) 
-		|| searchFile( filename,getSysDir() ) 
-		|| searchFile( filename,getWinDir() )  
+	else{
+		return searchFile( filename, ..io.localpath("\"))
+			|| searchFile( filename, ..io._exedir )
+			|| searchFile( filename,getCurDir() ) 
+			|| searchFile( filename,getSysDir() ) 
+			|| searchFile( filename,getWinDir() )  
+	}
 }
 
 /**intellisense(fsys) 
@@ -246,6 +257,7 @@ var function  enum_aux(dir,p="*.*",proc ,enumSubdir){
 	if( not ..string.endWith( dir,"\") ) {
 		dir = dir + "\";
 	}
+	var matchDir = ( type(enumSubdir)==type.function );
 	var data = WIN32_FIND_DATA()
 	var filename;
 	var fullpath;
@@ -256,10 +268,14 @@ var function  enum_aux(dir,p="*.*",proc ,enumSubdir){
 			if( (#filename) && (filename!=".") &&  ( filename!=".." ) ){
 				fullpath =  joinpath(dir,filename)
 				if( ( data.dwFileAttributes & 0x10/*_FILE_ATTRIBUTE_DIRECTORY*/ ) == 0 ){  
-					proc( dir,filename,fullpath,data ); 
+					if( proc( dir,filename,fullpath,data ) === false ) 
+						return false; 
 				}
 				else {
-					proc( fullpath,,,data ); 
+					if( (filename!=".") &&  ( filename!=".." ) ) {
+						if(  proc( filename,,fullpath,data) === false )  
+							return false; 
+					}
 				}
 			}
 			
@@ -275,7 +291,9 @@ var function  enum_aux(dir,p="*.*",proc ,enumSubdir){
 				if( (filename!=".") &&  ( filename!=".." ) ) {  
 					if(enumSubdir){
 						fullpath = joinpath(dir,filename);
-						enum_aux( fullpath,p,proc,enumSubdir );
+						if( (enumSubdir===true) || enumSubdir( fullpath ) ) 
+							if( enum_aux( fullpath,p,proc,enumSubdir ) === false )
+								return false;
 					}
 				}
 			}
@@ -291,7 +309,7 @@ function enum(dir,p="*.*",proc,enumSubdir=true/*是否搜索子目录*/){
 	dir = ..io.fullpath(dir);  
 	assert(..io.exist(dir) ,"目录不存在" + (dir:"") )
 	assert(type(proc)==type.function,"必须为win.enumFiles指定回调函数")  
-	enum_aux( dir,p,proc,enumSubdir);
+	return enum_aux( dir,p,proc,enumSubdir);
 }
 
 
@@ -366,7 +384,7 @@ namespace path{
 		return path3;
 	} 
  	canonicalize = function(path){
- 		var ret,cp = PathCanonicalize(0x104/*_MAX_PATH*/,path)
+ 		var ret,cp = PathCanonicalize(0x104/*_MAX_PATH*/,..io.fullpath(path) )
  		return cp
  	}
  	addBackslash = function(path){

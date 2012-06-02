@@ -1,51 +1,135 @@
-//内码转换
+//codepage 文件编码
 namespace  fsys.codepage
 
-reverseEndian = function(str){
-	m = ..raw.malloc(#str)
-	for(i=1;#str;2){
-		m[i] =str[i+1];
-		m[i+1] = str[i];
+reverseEndian = function(s){
+	var m = ..raw.malloc(#s)
+	for(i=1;#s;2){
+		m[i] =s[i+1];
+		m[i+1] = s[i];
 	}
-	return ..raw.tostring(m);
+	return ..raw.tostring(m,1,#s);
 }
 
-
-
-load = function(path){
-	var file = ..io.open(path,"rb")
-	var str;
-	var byte = file.read(2)
-	 
-	if( byte[1] == 0xFE && byte[2] == 0xFF){ 
-		str = file.read(-1);
-		file.close()
-	 
-		return ..string.fromUnicode( reverseEndian(str) ); 
-
+var encodeing = { 
+	["UTF-8"] = 65001;
+	["UNICODE"] = 1200;
+	["UTF-16LE"] = 1200; 
+	["UTF-16BE"] = 1201;
+}
+ 
+load = function(p,cp){
+	
+	if( type(cp) == type.string ){
+		cp = ..string.upper(cp)
+		cp = encodeing[cp];
+		if(!cp){
+			error('错误的编码,可选编码格式如下\n"UNICODE"\n"UTF-8"\n"UTF-16LE"\n"UTF-16BE"',2)
+		} 
 	}
-	elseif( byte[1] == 0xFF && byte[2] == 0xFE) {
-		str = file.read(-1);
-		file.close()
-		return ..string.fromUnicode(str);
-	}
-	elseif( byte[1] == 0xEF  && byte[2] == 0xBB) {
-		var byte = file.read(1)
-		if(byte[1] == 0xBF ){
-			str = file.read(-1);
-			file.close()
-			return ..string.fromto(str);
-		}
+	if(!#p){
+		error("文件路径不能为空",2)
 	}
 	
-	file.seek("set");
-	str = file.read(-1);
-	file.close()
-	return str;
-	 
+	var s; 
+	var f,err = ..io.open(p,"rb");
+	if(f){  
+		var b = f.read(2) //BOM 
+		if(  b[1] == 0xEF  && b[2] == 0xBB  ) {
+			var b = f.read(1)
+			if(b[1] == 0xBF ){
+				cp = 65001;//"UTF-8"; 
+			}
+			else{
+				f.seek("set");
+			}
+		} 
+		elseif(  b[1] == 0xFF  && b[2] == 0xFE  ) {
+			cp = 1200;  
+		}
+		elseif(  b[1] == 0xFE  && b[2] == 0xFF  ) {
+			cp = 1201;  
+		}
+		else {
+			f.seek("set"); 
+		}
+		s = f.read(-1);
+		f.close()  
+	}
+	else{
+		s = ..string.load(p)
+		if(!s)
+			return null,err;
+			
+		if(  s[1] == 0xEF  && s[2] == 0xBB && s[3] == 0xBF  ){
+			cp = 65001;//"UTF-8";
+			s = ..string.right(s,-4);
+		}
+		elseif( s[1] == 0xFF  && s[2] == 0xFE  ) {
+			cp = 1200;  
+			s = ..string.right(s,-3);
+		}
+		elseif( s[1] == 0xFE  && s[2] == 0xFF  ) {
+			cp = 1201;  
+			s = ..string.right(s,-3);
+		} 
+	} 
+	
+	if( cp == 1200 ) {
+		s = ..string.fromUnicode(s);
+	}
+	elseif( cp == 1201 ) {
+		s = ..string.fromUnicode( reverseEndian(s) ) ;
+	} 
+	elseif( cp ){  
+		s =  ..string.fromto(s,cp);
+	};
+	   
+	return s,cp;  
 }
 
+save = function(p,s,cp,fp=0){ 
+	var f;
+	var b;
+	if( type(cp) == type.string ){
+		cp = ..string.upper(cp)
+		cp = encodeing[cp];
+		if(!cp){
+			error('错误的编码,可选编码格式如下\n"UNICODE"\n"UTF-8"\n"UTF-16LE"\n"UTF-16BE"',2)
+		} 
+	}
+	
+	f,err = ..io.open(p,"w+b");
+	if(!f){
+		return null,err;
+	}
+	
+	if( cp == 65001 ) {
+		f.write('\xEF\xBB\xBF') 
+		s = ..string.fromto(s,fp,cp);
+	} 
+	elseif( cp == 1200 ) {
+		f.write('\xFF\xFE') 
+		s = ..string.toUnicode(s);
+	}
+	elseif( cp == 1201 ) {
+		f.write('\xFE\xFF') 
+		s = reverseEndian( ..string.toUnicode(s) ) ;
+	} 
+	else {
+		s = ..string.fromto(s,fp,cp);
+	}
+	 
+	f.write( s );
+	f.close();
+};
+
 /**intellisense(fsys.codepage)*/
-load(__/*文件路径*/) = 读取文件,\n可自动识别转换文件编码,\n支持:unicode,unicode big endian,utf8
+load(__/*文件路径*/) = 读取文件,\n可自动识别文件编码,并自动转换为ANSI编码,\n返回文件内容,读取内码
+load(__/*文件路径*/,"UTF-8") = 读取UTF-8编码文件\n并自动转换为ANSI编码,\n返回文件内容,读取内码
+load(__/*文件路径*/,"UTF-16LE") =  读取UNICODE(小尾序)编码文件\n并自动转换为ANSI编码,\n返回文件内容,读取内码
+load(__/*文件路径*/,"UTF-16BE") =  读取UNICODE(大尾序)编码文件\n并自动转换为ANSI编码,\n返回文件内容,读取内码
+save(__/*文件路径*/,str,"UTF-8") = 存为UTF-8编码文件,并添加BOM编码标识
+save(__/*文件路径*/,str,"UTF-16LE") = 存为UNICODE(小尾序)编码文件,并添加BOM编码标识
+save(__/*文件路径*/,str,"UTF-16BE") = 存为UNICODE(小尾序)编码文件,并添加BOM编码标识
 reverseEndian(__/*UNICODE字符串*/) = 大字节序(Big-Endian)与小字节(Little-Endian)的反向转换
 /*end intellisense**/

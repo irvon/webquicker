@@ -1,9 +1,12 @@
 //编译前预处理 
 namespace preload {}  
 
-::User32 := raw.loadDll("User32.dll");
-::Kernel32 := raw.loadDll("Kernel32.dll");
-::FILETIME := class{ 
+::User32 = ::MSG;
+::User32 = raw.loadDll("User32.dll");
+::Kernel32 = raw.loadDll("Kernel32.dll");
+::GetModuleHandle = Kernel32.api( "GetModuleHandleA", "pointer(string)");
+
+::FILETIME = class { 
 	INT dwLowDateTime ;
 	INT dwHighDateTime ;
 }
@@ -11,8 +14,10 @@ namespace preload {}
 ::User32=@User32.api( "__/*函数名字*/", "int()"); 
 ::Kernel32=@Kernel32.api( "__/*函数名字*/", "int()"); 
 ::FILETIME() = FILETIME结构
+::GetModuleHandle(__/*模块名*/) = 返回动态链接库的模块句柄 
 end intellisense**/
 
+_HINSTANSE = ::GetModuleHandle();
 _INVALID_HANDLE_VALUE = topointer(-1)
 gcdata = function(t){
 	var d = ..raw.malloc(1)
@@ -23,32 +28,65 @@ gcdata = function(t){
 gcdata = @ ..gcdata(\n	_gc = function(){\n		io.print("析构函数被调用了")\n	}\n	_topointer = function(){\n	\n	}\n)\n
 _INVALID_HANDLE_VALUE = topointer(-1)\n表示无效句柄 
 FILETIME() = FILETIME结构
+_HINSTANSE = 当前应用程序的实例句柄;
 end intellisense*/
 
-
-/*intellisense()*/  
-string.fromto = function(s,cp=65001,tocp=0){
-	if(!s){return};
+string.fromto = function(s,cp=65001,tcp=0){
+	if( (!s) || (cp==tcp) ){ return s; };
 	s = string.toUnicode(s,cp ); 
-	return s && string.fromUnicode(s,tocp); 
+	return string.fromUnicode(s,tcp); 
 }
 
-table.new = function(l,v=0){
-	var t  = {};
-	for(i=1;l)t[i]=v;
-	return t;
-}
+/**intellisense()
+string.fromto(.(字符串,源编码,目标编码) = 源编码为可选参数,默认为65001(UTF8)\n目标编码默认为0 
+end intellisense**/
 
-table.toclass = function(t){ 
-	return {@(table.ctor(t))};
-}
+namespace table{ 
 
-table.count = function(t){
-	var i = 0;
-	for(k,v in t){i++};
-	return i;
-} 
-/*end intellisense*/
+	splice = function(t,p,l,...){ 
+		if( l ) 
+			for(i=p+l-1;p;-1) 
+				remove(t,i); 
+		
+		p--;
+		var a = {...}
+		for(i=1;#a ) 
+			insert(t,a[i],p+i)  
+	}	
+	
+	slice = function(t,i=1,j){   
+  		return { rget(i,left(t,j!==null?j:#t) ) };
+	}
+	
+	mixin = function(a,b,...){
+		for(k,v in b) 
+			a[k] = v;	
+		if(!...) return a;   
+		return mixin(a,...); //尾调用优化
+	}  
+	
+	array = function(l,v){ 
+		var t = {}
+		for(i=1;l) t[i]=v; 
+		return t;
+	} 
+	
+	count = function(t){
+		var i = 0;
+		for(k,v in t){i++};
+		return i;
+	} 
+	
+	clone = copy;
+}
+    
+/**intellisense(table)
+array(.(数组长度,可选指定默元素认值) = 创建指定长度数组  
+count() = 返回table对象成员总数
+splice(.(数组,位置,删除长度,要插入的一个或多个元素) = 直接修改传入数组\n该函数无返回值
+slice(.(数组,开始位置,结束位置) = 从指定位置截取并返回新数组\n开始位置可选，默认为1\n结束位置可选,默认为数组长度\n如果位置参数为负数,则自右侧反向计算
+mixin(.(对象,任意多个混入对象) = 使用后面的对象混入前面的对象(浅拷贝),并返回该对象\n如果有相同的键值则使用混入对象替换目标对象的值\n并返回该对象 
+end intellisense**/ 
 
 var getLastError = ::Kernel32.api( "GetLastError", "int()"); 
 var formatMessage = ::Kernel32.api("FormatMessageA","INT(INT dwFlags,pointer source,INT id,INT lang,str& buf,INT size,pointer &arg )");
@@ -63,35 +101,58 @@ lasterr  = function(err,where){
 //线程库扩展模块;
 ::WaitForSingleObject := ::Kernel32.api("WaitForSingleObject", "INT(pointer hHandle,INT dwMilliseconds)");
 ::WaitForMultipleObjects := Kernel32.api("WaitForMultipleObjects", "INT(INT nCount,struct lpHandles,INT bWaitAll,INT dwMilliseconds)");
+::MsgWaitForMultipleObjects := User32.api("MsgWaitForMultipleObjects", "INT(INT nCount,struct lpHandles,INT bWaitAll,INT dwMilliseconds,INT dwWakeMask)");
  
 var threadwait = function(bAll, ...){
     var threads = ...;
     if(type(threads)!=type.table)  
     	threads ={...}
-    
-	var threads_c = raw.toarray( threads ,"pointer" ,"array") 
-	var re = WaitForMultipleObjects(#threads,threads_c,bAll, 0xFFFFFFFF  /* Infinite timeout*/);
-	select(re) {
-		case 258 //WAIT_TIMEOUT 
-			return null,"超时" 
-		case 0xFFFFFFFF 
-			return null,"失败"  
+    var len  = #threads
+    var waitfunc =( (!bAll) && ..win[["form"]] )?MsgWaitForMultipleObjects:WaitForMultipleObjects; 
+	var threads_c = raw.toarray( threads ,"pointer" ,"array")  
+	
+	var re;
+	do{
+		re = waitfunc(len,threads_c,bAll, 0xFFFFFFFF  /* Infinite timeout*/, 0x4FF/*_QS_ALLINPUT*/)  
+		select(re) {
+			case len{  
+				if( ! win.delay(100) ) 
+					return; 
+			}
+			case 258 //WAIT_TIMEOUT 
+				return null,"超时" 
+			case 0xFFFFFFFF 
+				return null,"失败"    
+		} 
+	}while(re==len) 
+	 
+	if( re & 0x80 ){
+		return null,re+1;//mutex
 	}
-	return re+1;
+	else{
+		return re+1;
+	}
 } 
-
-
-/*intellisense()*/  
+ 
 thread.waitAll = function(...){
 	return threadwait(1,...);
 }
-thread.waitOne = function(...){
+
+thread.waitClose = function(...){ 
+	var t = {...}
+	thread.waitAll(t);
+	for(i=1;#t){
+		raw.closehandle(t[i]) 
+	} 
+}  
+
+thread.waitOne = function(...){ 
 	return threadwait(0,...);
 }
+
 thread.wait  = function(handle,ms=0xFFFFFFFF){
-	return WaitForSingleObject(handle,ms);
-}
-/*end intellisense*/
+	return WaitForSingleObject(handle,ms)== 0/*_WAIT_OBJECT_0*/;
+} 
  
 var SetThreadAffinityMask = Kernel32.api("SetThreadAffinityMask","INT( int hThread,INT dwProcessAffinityMask)" )
 thread.setAffinity = function( h,cpu = 1){
@@ -102,7 +163,20 @@ thread.setAffinity = function( h,cpu = 1){
 lasterr() = 返回WINAPI或COM API的最后一次错误信息,第二个返回值为错误码\n无错误则返回null空值
 thread.setAffinity(__,2) = 指定线程在哪个CPU上运行
 thread.setAffinity(__) = 指定线程在CPU 1上运行 
+thread.waitOne(__) = 等待一个或多个线程其中一个返回\n参数可以是多个线程句柄\n或包含多个线程句柄的table\n如果在主线程中调用此函数,在等待过程中可处理窗口消息\n注意线程句柄不能大于64个
+thread.wait(__) =  等待一个线程句柄返回
+thread.waitAll(__) = 等待一个或多个线程返回\n参数可以是多个线程句柄\n或包含多个线程句柄的table
+thread.waitClose(__) = 等待一个或多个线程返回,并释放所有线程句柄\n参数可以是多个线程句柄\n或包含多个线程句柄的table
 end intellisense*/
+
+string.cmp_match = function(a,b){
+	return  ( type(a)==type(b) && ( (  string.cmp( a,b) == 0 ) ||  ( string.match( a  ,b ) ) ) )  
+}
+
+/**intellisense()
+string.cmp_match( __,"" ) = 忽略大小写比较两个字符串\n如果失败则使用模式语法匹配是否相同.\n如果其中一个参数不是字符串则返回false
+end intellisense**/
+
 
 //io.open共享模式参数
  /**intellisense()
@@ -113,17 +187,20 @@ _SH_DENYNO=@0x40/*共享模式*/
 _SH_SECURE=@0x80/*安全模式*/
 end intellisense**/
 
+/*intellisense(::)*/
 ::CopyMemory = Kernel32.api("RtlMoveMemory","int(POINTER Destination,pointer Source,int size)" ) ;
 ::CopyMemoryByStruct = Kernel32.api("RtlMoveMemory","int(POINTER Destination,struct Source,int size)" ) ;
+/*end intellisense*/
 
-//暂时修正方案
-..raw._malloc = ..raw.malloc
-..raw.malloc = function(s,v){
-	if(s[["_struct"]]){
-		var len = ..raw.sizeof(s);
-		var m = ..raw.malloc(len,0)
-		CopyMemoryByStruct(m,s,len);
-		return m;
-	}
-	return ..raw._malloc(s,v);
-}
+ raw.mixin = function(p,s,v,...){
+    raw.convert(p, s);
+    table.mixin(s,v,...)
+    CopyMemoryByStruct(p, s, raw.sizeof(s));
+    return s;
+ }
+
+math.mulDiv = ::Kernel32.api( "MulDiv", "int(int a,int b,int c)");
+/**intellisense()
+raw.mixin(.(指针,结构体对象,任意个混入对象) = 混入新的值,支持任意个混入table对象,\n自动更新指针指向内存,并返回结构体对象
+math.mulDiv(.(a,b,c) = 返回a乘b再除以c的结果,并自动四舍五入转为整数\n可尽量使运算不会溢出,运算错误则返回-1
+end intellisense**/

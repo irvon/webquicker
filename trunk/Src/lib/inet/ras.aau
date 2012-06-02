@@ -1,4 +1,4 @@
-//拔号连接
+//ras 拔号连接
 namespace inet.ras;
  
 RASDIALPARAMS = class{
@@ -86,9 +86,11 @@ RASENTRYNAME = class{
     INT flags;
     BYTE  phonebookPath[261];  
 }; 
+
 phoneEntries = { 
 	struct entryName[10] = { RASENTRYNAME() }
 }  
+
 getEntries = function(){
 	var ret, , ,count =  RasEnumEntries( , ,phoneEntries,..raw.sizeof(phoneEntries),0)
 	if(!ret){
@@ -97,12 +99,20 @@ getEntries = function(){
 	}
 	else
 		return null,lasterr(ret);
-	 
 }
  
+var dll = ..raw.loadDll("sensapi.dll")
+IsNetworkAlive = dll.api("IsNetworkAlive","INT(INT& flags)" ) 
+isAlive = function(){
+	var ok,flag = IsNetworkAlive(2)
+	if(ok)
+		return flag & 2,flag & 1;
+}
+
 /**intellisense(inet.ras)
 dial = @conn,msg = inet.ras.dial( \n	entryName =  "拔号连接名";\n	user =  "拔号用户名";\n	password = "拔号密码"\n)
 getEntries() = 返回所有拔号连接
 status(__/*拔号连接*/) = 返回拔号连接状态
 hangUp(__/*拔号连接*/) = 挂断
+isAlive() = 返回两个值: 是否存在远程连接,是否存在本地连接
 end intellisense**/

@@ -1,0 +1,6 @@
+var ret = string.load("examples/index.tpl");
+
+var username = request.cookie["username"];
+ret = string.replace(ret, "{login_state}", username ? username + "£¬ÄúÒÑµÇÂ¼¡£" : "ÄúÉĞÎ´µÇÂ¼£¬ÇëÏÈµÇÂ¼¡£");
+
+response.write(ret);

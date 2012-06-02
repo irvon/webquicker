@@ -1,31 +1,20 @@
-namespace web; 
-
-import util.metaProperty
-import win; 
+//.. Web窗体
 import com;
+import win.ui; 
+import util.metaProperty
+import web;
 
-mapurl = function(url){
- 	var local = ..io.localpath(url)
-	if( local ){  
-		if(not ..io.exist(local) ){  
-			url = ..string.upper(
-			..string.replace(url,"@\","/")
-			)
-			return ..string.concat( "res://", ..io._exepath , "/RES/" ,url); 
-		} 
-		return local
-	}
-	return url;
-}
+namespace web;  
 
 class form{
 
-	ctor( winform,hostflag,dlControl,agent)begin
+	ctor( winform,hostflag,dlControl,agent,securityTrusted)begin
 		this.dlControl = dlControl;
 		this.agent = agent;
+		this.securityTrusted = securityTrusted;
 	
 		//默认是有滚动条的，没有才需要设置
-		if( not winform[["scroll"]]){
+		if( not winform[["scroll"]]){ 
 			hostflag = hostflag?(hostflag|0x8/*_UIFLAG_SCROLL_NO*/) : hostflag/*_UIFLAG_SCROLL_NO*/ 
 		} 
  		this._hostflag = hostflag; 
@@ -42,54 +31,55 @@ class form{
 		*/ 
 		 
 		winform.web = this;
-		this._browser = this._object 
-		this.hwndEmbedding = ..win.findEx( winform.hwnd,0,"shell embedding" )
-		this.hwndControl = ..win.getLeaf( winform.hwnd )  
+		this._browser = this._object  
+		this.hwndEmbedding = ..win.findEx( winform.hwnd,0,"shell embedding" ) 
 		
 		//如果是控件,查找父窗口  
-		var mainForm = ..win.ui.getForm(winform.hwnd)  
-		if( ! mainForm[["_webHwnd"]] ){
-			mainForm._webHwnd = {};//web窗体句柄映射关系
-			
-			var isChild = ..win.isChild;
-			var getFocus =  ..win.getFocus;
-			var isDialogMessage = ..win.isDialogMessage
-			mainForm.isDialogMessage = function(hwnd,msg){  
-				//if (   (msg.message >= 0x100/*_WM_KEYFIRST*/) && (msg.message <= 0x108/*_WM_KEYLAST*/) ) { 
-					var focus = getFocus();
-					for(hwnd,wb in mainForm._webHwnd ){ 
-						if( isChild(hwnd,focus ) ){
-							if( wb._host.tranacc(msg) )  
-				   				return true;   
-				   			return;
-						} 
-					} 
-					return isDialogMessage(hwnd,msg);  
-			 	//}
-			}
-			mainForm._ondestroy = function(){
-				for(hwnd,wb in mainForm._webHwnd ){
+		var mainForm = ..win.form.getForm(winform.hwnd)  
+		if( ! mainForm[["_hwndToWebForms"]] ){
+			mainForm._hwndToWebForms = {}; 
+			mainForm._onDestroy = function(){
+				for(hwnd,wb in mainForm._hwndToWebForms ){
 					//必须按以下顺序释放资源
-					collectgarbage("collect")
-					..com.ReleaseConnection(wb._browser);
-					..com.Release(wb._browser)
+					collectgarbage("collect") 
+					if( ..com.IsObject(wb._browser) ){
+						..com.ReleaseConnection(wb._browser); 
+						..com.Release(wb._browser) 
+					}
 					wb._host.close()  
 				} 
 			}
+			 
+			var isChild = ..win.isChild;
+			var getFocus =  ..win.getFocus;
+			var defIsDialogMessage =  mainForm.isDialogMessage or ..win.isDialogMessage;
+			mainForm.isDialogMessage = function(hwnd,msg){   
+				var focus = getFocus();
+				for(hwnd,webForm in mainForm._hwndToWebForms ){ 
+					if( isChild(hwnd,focus ) ){
+						if( webForm._host.tranacc(msg) )  
+				   			return true;   
+						return;
+					} 
+				} 
+				return defIsDialogMessage(hwnd,msg);   
+			};
 		} 
-		mainForm._webHwnd[ winform.hwnd ] = this;   
+		mainForm._hwndToWebForms[ winform.hwnd ] = this;   
 		 
 		winform.adjust = function( cx,cy) {	 
-			..win.setRect(this.hwndEmbedding,winform.clientRect)  
+			..win.setRect(this.hwndEmbedding,winform.getClientRect() )  
 		};  
 		var sink, cookie =..com.Connect(this._browser, this );
 	end;  
-	
-	@metaProperty;
+	@_metaProperty;
 }
  
-namespace form { 
+import web.form.query;
+namespace form {
 
+	var delay = ..win.delay; 
+	
 	IDisptch = {
 		[-5512] = function(){
  			return owner.dlControl;
@@ -98,19 +88,26 @@ namespace form {
  				return owner.agent
  		}
 	}
-
-	metaProperty = ..util.metaProperty(
-	
+ 
+	var isWnd = ..win.isWindow; 
+	_metaProperty = ..util.metaProperty( 
+	 
 		["type"] = {
 			_get = function(){ 
-				return  owner._browser.Type
+				return  owner._browser.getType()
 			} 	
-		}; 
+		};
+		hwndControl = {
+			_get = function(){ 
+				owner.wait()
+				return  ..win.getLeaf( owner.hwndEmbedding )
+			} 	
+		};
 		waitClose = function(){
 			//等待直到web窗口被关闭
 			var hwnd = owner._form.hwnd; 
-			while( ..win.isWindow(hwnd) ) 
-				..win.delay(100)  
+			while( delay(200) && isWnd(hwnd)  ) {
+			} 	  
 		}
 		
 		isbrowser = function(pdisp){
@@ -119,22 +116,22 @@ namespace form {
  		
 		wait = function(url,timeout){ 
 			//等待页面下载完成(如果不指定url参数，则等待当前页面打开)
-			var hwnd = owner._form.hwnd; 
-			var delay = ..win.delay;
+			var hwnd = owner._form.hwnd;  
 			var browser = owner._browser;
 			var curl;
 			var tk = 0;
-			var iswindow = ..win.isWindow;
-			while( iswindow(hwnd) ){ 
+			
+			while( delay(200) && isWnd(hwnd)  ){ 
 		  		
 					do { 
-	   					delay(100)
-	   					tk+=101;
-	   					
-	   					if( timeout && tk>timeout)
-							return false,"Timeout!";
+	   					if(!delay(200)) return false;	
+						if( timeout ) {
+							tk+=101;
+							if( tk>timeout )
+								return null,"Timeout!"  
+						};
 							
-					}while( iswindow(hwnd) && ( (browser.ReadyState != 4/*READYSTATE_COMPLETE*/) || browser.Busy ) )
+					}while( isWnd(hwnd) && ( (browser.ReadyState != 4/*READYSTATE_COMPLETE*/) || browser.Busy ) )
 			 		
 			 		//如果用户没有指定需要到达的URL
 					if(!url)
@@ -147,203 +144,321 @@ namespace form {
 	   					if(..string.find( curl,"err") )  
 	   						return false; 
 					}			
-					 	
-					delay(100) 
-					tk+=101;
-					if( timeout && tk>timeout)
-						return false,"Timeout!";
+					  	
+					if( timeout ) {
+						tk+=101;
+						if( tk>timeout )
+							return null,"Timeout!"  
+					};
 	  		
 			} 
 			return false;
 		}
 		
-		waitEle = function(name,frame,timeout){ 
-			//等待页面下载完成(如果不指定url参数，则等待当前页面打开)
-			var hwnd = owner._form.hwnd; 
-			var delay = ..win.delay; 
+		waitEle = function(name,frame,timeout,complete=true ){  
 			var ele;
-			var tk = 0;
-			while( ..win.isWindow(hwnd) ){ 
-				delay(100)
-				tk+=101;
-				ele = owner.getEle(name,frame) 
-				if(ele) 
-					return ele;
-				if( timeout && tk>timeout)
-						return null,"Timeout!"
-						
-			} 
-			return null;
-		}
-		waitDoc = function( frame,timeout){ 
-			//等待页面下载完成(如果不指定url参数，则等待当前页面打开)
-			var hwnd = owner._form.hwnd; 
-			var delay = ..win.delay; 
+			var wb = owner;
+			return ..win.wait(
+				function(){
+					ele = ele || wb.getEle(name,frame) 
+					if(ele && ( (!complete) || ele.readyState == 'loaded' || ele.readyState == 'complete')  )
+						return ele;
+				},
+				wb._form.hwnd,timeout,200
+			); 
+		} 
+		
+		waitDoc = function( frame,timeout,complete=true){ 
 			var doc;
-			var tk = 0;
-			while( ..win.isWindow(hwnd) ){ 
-				delay(100)
-				tk+=101;
-				doc = owner.getDoc(frame) 
-				if(doc) 
-					return doc;
-					
-				if( timeout && tk>timeout)
-						return null,"Timeout!"
-						
-			} 
-			return null;
+			var wb = owner; 
+			return ..win.wait(
+				function(){
+					doc = wb.getDoc(frame) 
+					if(doc && ( (!complete) || doc.readyState == 'loaded' || doc.readyState == 'complete')  )
+						return doc;
+				},
+				wb._form.hwnd,timeout,200
+			); 
 		}
  		
-		doScript = function(s,frame,n="javascript"){//执行网页脚本或框架内脚本
-			var doc = owner.getDoc(frame)
-			if( doc  ){
-				var wd =  doc.parentWindow 
-				return wd ? wd.execScript(s,n);
-			} 
-   		
+ 		attach = function( func,event, ...){  
+ 			var ele,frame = ...
+ 			if( !ele )
+ 				ele = owner.getDoc();
+ 			elseif( type(ele) == type.string ){
+ 				ele = owner.getEle(...); 
+ 			}
+ 			if(!ele)
+ 				return false;
+ 			
+			return ele.attachEvent(event, func )
 		}
 		
+		attachAll = function( tEle,frame ){
+			for( ele,tEvent in tEle ){ 
+				for(event,func in tEvent ){
+					owner.attach( func,event,ele,frame);
+				} 
+			} 
+		} 
+		
+		doScript = function(s,frame,n="javascript"){//执行网页脚本或框架内脚本 
+			var doc = owner.getDoc(frame)
+			if( doc  ){
+				var wd =  doc.parentWindow
+				return wd ? wd.execScript(s,n);
+			}  
+		} 
+		
+		eventScript = function(s,id,event="onclick",frame,n="javascript"){
+			var doc = owner.waitDoc(frame)
+			var ele = doc.createElement("script");
+			ele.type = "text/" + n;   
+    		ele.text = s; 
+    		ele.htmlFor = id;
+    		ele.event = ..string.match(event,"[^(]+") + "()";
+    		doc.getElementsByTagName('head')(0).appendChild(ele)  
+		} 
+		
+		loadScript  = function(path,frame,charset){   
+			var doc = owner.waitDoc(frame)  
+			if(!doc) return;
+			
+			var mtype = ..string.endWith(path,".vbs",true) 
+    			? "vbs"
+    			: "javascript"
+    				
+			if( (!charset) && (doc.charSet == "utf-8") ){
+				charset = "utf-8"
+			}
+			
+			var s = ..string.load( path ); 
+			if( #s ){ 
+				if( s[1] == 0xEF  && s[2] == 0xBB && s[3] == 0xBF) {
+					s = ..string.fromto( ..string.sub(s,4 ) );
+				}
+				else if ( ..string.cmp(charset,"utf-8") == 0 ){
+					s = ..string.fromto( s );
+				};
+				
+				return owner.doScript( s, frame,mtype); 
+			}
+			else {
+				if( ..io.localpath(path) )
+					return;
+			}
+			 
+			
+			var ele = doc.createElement("script");
+			ele.type = "text/" + mtype; 
+			ele.charset = charset;
+    		ele.src = path;
+    		while( ele.readyState != 'loaded'  && ele.readyState != 'complete'  ){
+    			if(!delay(10)) return false;
+    		}  
+    		doc.getElementsByTagName('head')(0).appendChild(ele) ;
+		};
+
 		fromPoint = function(x = 0,y=0,frame){
-			var doc = owner.getDoc(frame);
-   			if( doc  ){
-					return doc.elementFromPoint(x,y);
+			var ele = owner.getDoc(frame);
+   			if( ele  ){
+   				try {
+					ele = ele.elementFromPoint(x,y);
+				}
+				return ele;
    			}
-		}
+		};
 		
 		getPoint = function(ele){
 			var x,y = 0,0;
-			while(ele){
+			while(ele && (ele.offsetLeft!==null) ){
 				x+=ele.offsetLeft
 				y+=ele.offsetTop
 				ele= ele.offsetparent
-			}
+			} 
 			return x,y;
-		}
-		getPos = function(ele,screen){
-			var x,y = owner.getPoint(ele);
+		};
+		
+		getPos = function(ele,screen){  
+			var x,y = owner.getPoint(ele); 
 			var doc = ele.ownerDocument;
-			var eleDoc = doc.documentElement?doc.body
+			if(!doc)
+				return 0,0,0,0;
+				
+			var eleDoc = doc.documentElement : doc.body
 			x,y = x - eleDoc.scrollLeft,y - eleDoc.scrollTop;
+		
 			if(screen){
 				var wd = doc.parentWindow;
 				x,y = x + wd.screenLeft,y + wd.screenTop;
 			}
 			return x,y,ele.offsetWidth,ele.offsetHeight 
-		}
+		};
 		
 		getEle = function(id,frame){
+			if( type(id) == "table" ) return id;
+			
 			var doc = owner.getDoc(frame);
-			if(doc){
+			if(doc){   
 				var ele = doc.getElementById(id);
-				if(ele) return ele;
-		 		
+				if(ele) return ele; 
 				var eles = doc.getElementsByName(id);
 				return eles(0); 
 			} 
-		}
+		};
+
 		getEles = function(name,frame){
    			var doc = owner.getDoc(frame);
    			return doc && doc.getElementsByName(name);
-		}
-			
- 		getOption = function(name,ind,frame){
-			var ele = owner.getEle(name,frame);  
-			return ele.options(ind);
-		}
+		}; 
 		
-		findOption = function(name,v,frame){
-			var ele = owner.getEle(name,frame);  
-			for i,opt in com.each(ele.options) {
-				if(opt.value=v or opt.innerText==v)
-					return opt;
+		getElesByTag = function(name,frame){
+   			var doc = owner.getDoc(frame); 
+   			return doc && doc.getElementsByTagName(name);
+		};  
+		
+		queryEles = function(opt,waitDocTimeout){
+		 	var tab = {}
+		 	var cmp = ..string.cmp_match
+		 	var parent = opt.parent;
+		 	opt.parent = null; 
+		 	var attr;
+			for i,ele in owner.eachAll( ,parent,waitDocTimeout ) {
+				try {
+					for(k,v in opt) { 
+						attr = ele.getAttribute(k);
+						if( type(attr) == "table" ){
+							if( type(v) == "table" ){
+								for(attr_k,attr_v in v){
+									if( ! cmp( attr[attr_k],attr_v )){  
+										return;
+									} 
+								} 
+							}
+							else {
+								return;
+							};
+						} 
+						elseif( ( attr!=v ) && ( ! cmp( attr,v ) ) ){  
+							return;
+						} 
+					} 
+					..table.push(tab,ele);
+				}
 			} 
+			return query( tab,owner );
+		};
+		
+		waitQueryEles = function(arg,timeout,complete=true ){
+			var qEle;
+			var wb = owner;
+			return ..win.wait(
+				function(){
+					var qEle =  wb.queryEles(arg,timeout,true) 
+					if( #qEle > 0  && ( (!complete) || qEle.readyState == 'loaded' || qEle.readyState == 'complete')  )
+						return qEle;
+				},
+				wb._form.hwnd,timeout,200
+			); 	
 		} 
-		
-		
+		 
 		write = function(strhtml,frame ){
 			var doc = owner.getDoc(frame)
 			if(!doc){ 
 				if(!frame){
-					owner.go("about:blank")
+					owner._browser.Navigate("about:blank");
 					doc = owner.document;
 				}
 			}
 			if(!doc)
 				return false;
-			
+				 
 			doc.write(strhtml); 
 			doc.close();
-		}   
+		};   
 		
 		go = function(url,headers,target="_self"){  
 			url = ..web.mapurl(url);  
 			owner._browser.Navigate(url,0,target,null,..string.concat(headers,owner.addHeaders))
-		}
+		};
+		
 		post = function(url,postdata,headers='\r\nContent-Type: application/x-www-form-urlencoded',target="_self"){ 
 			if(headers=="")headers=null;
 			if(!postdata)return owner.go(url); 
 			url = ..web.mapurl(url);
-			owner._browser.Navigate(url,0,target,{ postdata/* 转换为字节数组*/ } ,..string.concat(headers,owner.addHeaders) )
-		}
+			owner._browser.Navigate(url,0,target,{ _safearray = postdata/* 转换为字节数组*/ } ,..string.concat(headers,owner.addHeaders) )
+		};
 		
 		goback = function(){ 
 			owner._browser.GoBack()
-		} 
+		}; 
 		goforward = function(){ 
 			owner._browser.GoForward()
-		} 
+		}; 
 		gohome = function(){ 
 			owner._browser.GoHome()
-		} 
+		}; 
 		gosearch = function(){ 
 			owner._browser.GoSearch()
-		} 
+		}; 
 		refresh = function(){ 
 			owner._browser.Refresh()
-		}
-		refresh2 = function(ref=REFRESH_COMPLETELY){ 
-			owner._browser.Refresh2(0)
-		}
-		refresh3 = function(ref=REFRESH_COMPLETELY){ 
-			owner._browser.Refresh2(3)
-		}
+		};
+		refresh2 = function(lev=0){ 
+			owner._browser.Refresh2(lev)
+		};
+		refresh3 = function(lev=3){ 
+			owner._browser.Refresh2(lev)
+		};
 		stop = function(){
 			owner._browser.Stop()
-		}  
+		}; 
 		eachFrames = function(frame){
 			var doc = owner.getDoc(frame); 
 			if(doc)
 				return ..com.each( doc.frames  );
-		}
-		eachAll = function(tag,frame){
-			var doc = owner.getDoc(frame); 
+		};
+		eachAll = function(tag,parent,timeout){
+			var doc;
+			if( type(parent) == type.table ){
+				doc = parent;
+			}
+			else {	
+				doc = owner.waitDoc(parent,timeout,false );
+			}
+				
 			if(doc){
 				if(tag)
 					return ..com.each( doc.all.tags(tag)  );
 			 		
 				return ..com.each( doc.all  );
 			}
-		} 
-		eachLinks = function(frame){
-			return owner.eachAll('A',frame )  ); 
-		}
+			return function(){};
+		}; 
+		eachLinks = function(parent,timeout){
+			return owner.eachAll('A',parent,timeout)  ); 
+		};
 		getFrame = function(frame){
+			
 			if(type(frame)==type.table)
 				return frame[["contentWindow"]] : frame;
-				
-			var ele;	
-			var ind = tonumber(frame) 
-			if(ind!==null) 
-				ele = owner.getDoc().frames(ind) 
+	 
+			var ele;
+			if(type(frame)==type.number) {
+				var ind = frame;
+				var f = owner.waitDoc().frames;
+				if( ind >=0 && ind < f.length ) {
+					ele = f(ind) 
+				}
+			} 
    			else if(#frame){
    				ele =  owner.getEle(frame);
    				if(ele)
    					ele = ele.contentWindow;
-   			}
+   			}  
    			return ele;
-		}
-		getDoc = function(frame){  
+		};
+		getDoc = function(frame){
 			if(frame===null)
 				return owner._browser.Document; 
 			
@@ -351,16 +466,44 @@ namespace form {
    			if(ele){
    				var doc;
    				try{
-   					doc = ele.Document; //ele.contentDocument
+   					doc = ele.Document : ele ; //ele.contentDocument
    				}
    				return doc;
    			}
-		}
+		};
+		getWebForm  = function(){
+			error("请调用web.form.util.crossDomain(true)",2)
+		};
+		jQuery = {
+			_get = function(){ 
+				var s = owner.waitDoc().Script; 
+				var jq = s.jQuery
+				if(jq)
+					return jq;
+				
+				owner.loadScript( "/res/js/jQuery/jQuery.min.js", ,"utf-8" );
+				 
+				if( ! s.jQuery ){
+					owner.loadScript( "http://ajax.googleapis.com/ajax/libs/jquery/1.6.3/jquery.min.js", ,"utf-8" ); 
+					if( ! s.jQuery )
+						owner.loadScript( "http://code.jquery.com/jquery-1.6.3.min.js", ,"utf-8" );   
+				} 
+				return s.jQuery;
+			} 
+		}; 
 		document = {
 			_get = function(){ 
 				return  owner.getDoc()
 			} 
 		};
+		script = {
+			_get = function(){
+				return owner.waitDoc().getScript();
+			}
+		}
+		getScript = function(...){
+				return owner.waitDoc(...).getScript(); 
+		}
 		host = {
 			_get = function(){  
  				return  owner.getDoc().parentWindow.location.host
@@ -368,28 +511,33 @@ namespace form {
 		}; 
 		body = {
 			_get = function(){ 
-				return  owner.getDoc().Body
+				return  owner.getDoc().getBody()
+			} 	
+		}; 
+		head = {
+			_get = function(){ 
+				return  owner.getDoc().getElementsByTagName('head').item(0)
 			} 	
 		};   
 		location = {
 			_get = function(){ 
-			 	return owner._browser.LocationURL ;  
+			 	return owner._browser.getLocationURL() ;  
 			}
 			_set = function( value ){
 				owner._browser.Navigate(value) ;  
 			} 	
 		};  
 		silent = {
-			_get = function(){ 
-				return owner._browser.Silent ;  
+			_get = function(){   
+				return owner._browser.getSilent() ;  
 			}
 			_set = function( value ){
-				owner._browser.Silent = value;  
+				owner._browser.setSilent(value);  
 			} 	
 		}; 
 		application = {
 			_get = function(){ 
-				return owner._browser.Application ;  
+				return owner._browser.getApplication() ;  
 			}
 		}
 		execEle = function(ele,cmd,val,ui){ 
@@ -424,10 +572,60 @@ namespace form {
 				} 
 				return owner._proxyOpen.application; 
 			} 	
-		};   
+		};  
+
+		click = function(eleName,min=1,max=500,frame){
+			var ele = owner.getEle(eleName,frame); 
+			ele.fireEvent("onmousemove"); 
+			ele.fireEvent("onmouseenter"); 
+			ele.fireEvent("onmouseover");  
+			
+    		..win.delay( ..math.random(min,max) );
+    		ele.fireEvent("onkeydown");
+    		ele.fireEvent("onkeyup");
+    		ele.fireEvent("onmousedown");
+    		ele.fireEvent("onmouseup") 
+    		
+    		ele.click(); 
+    		ele.fireEvent("onclick");
+    		if(ele.tagName=="INPUT"){ ele.focus();}
+    		ele.fireEvent("onfocus");
+    		
+    		ele.fireEvent("onmousemove"); 
+    		ele.fireEvent("onmouseleave");
+    		owner.wait(); 
+		};  
 		
-		["select"] = function(name,v,sel=true,frame){//支持框架
-			var ele = ..com.IsObject(name)? name: owner.getEle(name,frame);   
+		["setEle"] = function(eleName,val,name,frame){ 
+			var ele = owner.getEle(eleName,frame);  
+			
+			if( type(val) == type.table ){
+				for(k,v in val) 
+					owner.setEle(eleName,v,k,frame); 
+			}
+			elseif(name){ 
+				ele[name] = val;
+			}
+			if( ..string.cmp(ele.tagName,"textArea") == 0  ){
+				ele.innerText = val;
+			}
+			elseif( !  ..string.cmp(ele.tagName,"input") ){
+				select(ele.type) { 
+					case "radio","checkbox" {
+						ele.checked = val;
+					};
+					else {
+						ele.value = val;
+					};
+				};
+			}; 
+			elseif(  ..string.cmp(ele.tagName,"select") == 0 ){
+				owner.select( ele,val );
+			}
+		}; 
+		
+		["select"] = function(eleName,v,sel=true,frame){ 
+			var ele = owner.getEle(eleName,frame);   
 			var opt;
 			if(ele){
    				if(type(v)==type.number and v < ele.length){
@@ -451,20 +649,23 @@ namespace form {
 		}
 	 	
 	) 
+	
+	with _metaProperty{ 
+		html = { _set = write };
+	}
 }
  
-//自动提示
 /******intellisense( ) 
-web.mapurl(__/*根目录相对路径*/) = 将根目录下的相对路径转换为正确的URL\n支持发布后的内嵌资源文件\n此函数在web.form库内定义
 web.form( __/*winform对象*/ ) = 创建web窗体
 !wb.dlControl = 修改下载控制台参数\n
 !wb.hwndEmbedding = 嵌入窗口
 !wb.hwndControl = 控件窗口
-!wb._browser = 浏览器控件,com对象
-!wb._object = 控件对象
+!wb._browser = 浏览器控件,com对象 
+!wb._crossDomain = 该对象是否使用跨域框架创建
 !wb.addHeaders = 设置默认的请求头\n在调用go()或post()函数时,将自动附加addHeaders
 !wb.write("__") =  将字符串值写入网页、不允许追加
 !wb.write("__","框架名") = 将字符串值写入框架网页、不允许追加
+!wb.html = @.html = /**\n		__/*请输入HTML*/ \n**/
 !wb.type = 返回当前加载的文件类型\n例如doc文件返回Microsoft Word Document 
 !wb.wait(__,20000) = 等待指定的网址下载完成\n第二个参数指定最大超时值(毫秒)
 !wb.wait("__") = 等待指定的网址下载完成，支持模式语法
@@ -482,33 +683,51 @@ web.form( __/*winform对象*/ ) = 创建web窗体
 !wb.host = 当前网址所在主机名
 !wb.go("__/*网址*/","自定义http头") = 打开网址
 !wb.go("__/*网址*/","自定义http头","目标框架") = 打开网址
-?wb.eachAll = !ele.
-?wb.eachLinks = !ele.
-!eleWindow.frameElement = 获取在父文档中生成 window 的 frame 或 iframe 对象
-!eleWindow.parent = 获取对象层次中的父窗口
-!eleWindow.document = document.
-!eleWindow.location = 当前URL
-!eleWindow.navigate(__/*url*/) = 在当前窗口中装入指定 URL
-!eleWindow.prompt(.(消息,默认值) = 显示输入对话框
-!eleWindow.screenTop = 网页正文部分上
-!eleWindow.screenLeft = 网页正文部分左
-!eleWindow.height = 屏幕分辨率的高
-!eleWindow.width = 屏幕分辨率的宽
-?wb.eachFrames = !eleWindow.
+!jsGlobal.frameElement = 获取在父文档中生成 window 的 frame 或 iframe 对象
+!jsGlobal.parent = 获取对象层次中的父窗口
+!jsGlobal.document = document.
+!jsGlobal.location = 当前URL
+!jsGlobal.location.
+!jsGlobal.location.hash = 网址“#”号后面的分段
+!jsGlobal.location.host = URL的主机以及端口号部份
+!jsGlobal.location.hostname = URL中的域名主机部份
+!jsGlobal.location.href = URL网址
+!jsGlobal.location.pathname = URL中的文件路径
+!jsGlobal.location.port = 端口号
+!jsGlobal.location.protocol = URL使用的协议
+!jsGlobal.location.search = 问号后面的部份 
+!jsGlobal.navigate(__/*url*/) = 在当前窗口中装入指定 URL
+!jsGlobal.prompt(.(消息,默认值) = 显示输入对话框
+!jsGlobal.screenTop = 网页正文部分上
+!jsGlobal.screenLeft = 网页正文部分左
+!jsGlobal.height = 屏幕分辨率的高
+!jsGlobal.width = 屏幕分辨率的宽
+!jsGlobal.focus() = 获得焦点
+!jsGlobal.脚本函数名__() =  调用JS函数必须有实参\n无参数调用则返回函数类对象
+!jsGlobal.window = !jsGlobal.
+!jsGlobal.navigator = !navigator.
+!navigator.platform = 操作系统名称
+!navigator.systemLanguage = 系统默认语言
+!navigator.browserLanguage = 浏览器当前语言 
+!navigator.appVersion = 浏览器运行平台和版本 
+!navigator.cpuClass = CPU 等级 x86 
+!navigator.cookieEnabled  = 是否允许cookie
+
 !wb.eachFrames() = @//创建迭代器,迭代页面所有框架窗口，例：\nfor i,frame in ??.eachFrames() {\n	__\n}\n
 !wb.eachLinks() = @//创建迭代器,迭代页面所有超链接，例：\nfor i,link in ??.eachLinks() {\n	__\n}\n
 !wb.eachAll() = @//创建迭代器,迭代页面所有节点，例：\nfor i,ele in ??.eachAll() {\n	__\n}\n
 !wb.eachLinks("框架名") = @//创建迭代器,迭代页面所有超链接，例：\nfor i,link in ??.eachLinks("__/*框架名*/") {\n	\n}\n
+!wb.eachLinks(父节点) = @//创建迭代器,迭代页面所有超链接，例：\nfor i,link in ??.eachLinks( ??.getEle("id") ) {\n	\n}\n
 !wb.eachAll("input") = @//创建迭代器,迭代页面所有输入控件，例：\nfor i,input in ??.eachAll("input") {\n	__\n}\n
 !wb.eachAll("input","框架名") = @//创建迭代器,迭代页面所有输入控件，例：\nfor i,input in ??.eachAll("input","框架名") {\n	__\n}\n
+!wb.eachAll("DIV",父节点) = @//创建迭代器,迭代页面所有输入控件，例：\nfor i,input in ??.eachAll("DIV" ,??.getEle("id") ) {\n	__\n}\n
 !wb.goback()=导航到历史列表中的上一个页面
 !wb.goforward()=导航到历史历表中的下一个项目
 !wb.gohome()=导航到缺省页面
 !wb.gosearch()=导航到缺省页面
 !wb.refresh()=刷新页面\n如果服务器未更新则不会重新下载，类似在浏览器中按F5的效果
-!wb.refresh2()=重新下载页面
-!wb.refresh3()=重新下载最新页面\n添加Pragma:no-cache请求头,强制服务端刷新\n类似在浏览器中按下Ctrl+F5的效果
-!wb.refresh2=根据指定的刷新级别刷新当前页面
+!wb.refresh2(__)=重新下载页面\n可在参数中指定级别
+!wb.refresh3()=重新下载最新页面\n添加Pragma:no-cache请求头,强制服务端刷新\n类似在浏览器中按下Ctrl+F5的效果 
 !wb.stop()=停止当前导航
 !wb.BeforeNavigate2 = @.BeforeNavigate2=function( pDisp, url, Flags, TargetFrameName, PostData, Headers, Cancel ) { 
 /*导航发生前触发（打开网页前），刷新时不触发*/
@@ -543,7 +762,7 @@ __/*请输入代码*/
 	return true; /*返回false则不显示对话框*/
 }
 
-!wb.CommandStateChange = @.CommandStateChang=function(cmd,enable) {
+!wb.CommandStateChange = @.CommandStateChange=function(cmd,enable) {
  	/*当命令的激活状态改变时触发。它表明何时激活或关闭Back和Forward菜单项或按钮 */
  	select(cmd) {
  		case 0xFFFFFFFF/*_CSC_UPDATECOMMANDS*/ {  
@@ -573,6 +792,10 @@ __/*请输入代码*/
 	/*当某项下载操作已经完成后触发，刷新也可触发此事件*/
 	__/*请输入代码*/
 } 
+
+!wb.StatusTextChange = @.StatusTextChange=function(text) { 
+	__/*状态文本改变*/
+}
 
 !wb.FileDownload = @.FileDownload=function( activeDocument, cancel /*返回值*/) {
 	__/*请输入代码*/
@@ -610,14 +833,19 @@ __/*请输入代码*/
 	/*return wb.openproxy; */ 
 }
 
+!wb.WindowClosing = @.WindowClosing = function (IsChildWindow, Cancel) {
+    return true __/*返回true取消关闭操作*/; 
+}
+
 !wb.translate = @.translate = function( url ){
 	/*解析URL时触发 */
 	owner.translateUrl = url; 
 	__/* if( string.startWith(url,"http:",true) )
 	return 新的URL;*/
 }
-
 !wb._form = !winform.
+!ele.type = 类型
+!ele.src = 源文件地址
 !ele.fireEvent("onclick") = 自动触发element元素节点的事件脚本.
 !ele.click() = 触发onclick 事件来模拟单击
 !ele.focus() = 使得元素得到焦点并执行由 onfocus 事件指定的代码。
@@ -626,23 +854,30 @@ __/*请输入代码*/
 !ele.doScroll("scrollbarPageDown") = Page-down scroll bar shaft is at the specified location.   
 !ele.doScroll("down") = Composite reference to scrollbarDown.  
 !ele.doScroll("pageDown") = Composite reference to scrollbarPageDown.  
-!ele.setAttribute("属性名","属性值")  = 修改属性\n也可以直接写 ele.属性名字 = 值
-!ele.getAttribute("属性名")  = 获取属性\n也可以直接写 var 返回值=ele.属性名字
-!ele.getAttributeNode("属性名") = 获取attribute对象。 
+!ele.setAttribute("属性名__","属性值")  = 修改属性\n也可以直接写 ele.属性名字 = 值
+!ele.getAttribute("属性名__/*属性名*/")  = 获取属性\n也可以直接写 var 返回值=ele.属性名字
+!ele.getAttributeNode("__/*属性名*/") = 获取attribute对象
 !ele.hasChildNodes = 对象是否有子对象的值。 
+!ele.appendChild(__) = 给对象添加一个子节点\n可使用wb.getDoc().createElement("TAG") 创建节点
 !ele.innerHTML = 返回节点内的HTML代码
 !ele.outerHTML = 返回该节点的HTML代码
+!ele.innerText = 设置或获取对象的文本 
 !ele.outerText = 设置或获取对象的文本 
 !ele.insertAdjacentHTML("beforeBegin",__/*HTML代码*/) = 在节点之前插入HTML
 !ele.insertAdjacentHTML("afterBegin",__/*HTML代码*/) = 在节点内部最前面插入HTML
-!ele.insertAdjacentHTML("beforeEnd",__/*HTML代码*/) = 在节点之后插入HTML
-!ele.insertAdjacentHTML("afterEnd",__/*HTML代码*/) = 在节点内部最后面插入HTML
+!ele.insertAdjacentHTML("beforeEnd",__/*HTML代码*/) = 在节点内部最后面插入HTML 
+!ele.insertAdjacentHTML("afterEnd",__/*HTML代码*/) = 在节点之后插入HTML
 !ele.insertAdjacentText("beforeBegin",__/*文本*/) = 在节点之前插入文本
 !ele.insertAdjacentText("afterBegin",__/*文本*/) = 在节点内部最前面插入文本
-!ele.insertAdjacentText("beforeEnd",__/*文本*/) = 在节点之后插入文本
-!ele.insertAdjacentText("afterEnd",__/*文本*/) = 在节点内部最后面插入文本
+!ele.insertAdjacentText("beforeEnd",__/*文本*/) = 在节点内部最后面插入文本
+!ele.insertAdjacentText("afterEnd",__/*文本*/) =  在节点之后插入文本
+!ele.insertBefore(__/*新节点对象*/) = 第二个参数可选指定一个子节点对象\n在该节点前插入新节点,忽略则插入到最后面.
 !ele.checked = 复选框、单选框等选中状态
 !ele.form.submit() = 自动提交表单
+!ele.elements(.(索引,子索引) = 表单控件集合,非表单节点该属性无性.\n索引可以为数值或字符串,\n如果有同名控件,可使用第二个参数指定在该集合中的索引.
+!ele.elements() = !ele.
+!ele.getElementsByTagName("__") = 获取基于指定元素名称的对象集合
+!ele.getElementsByTagName() = !ele.
 !ele.contains(ele2__) = 判断一个节点是否包含另外一个节点
 !ele.selected = 设置为下拉选框选中项
 !ele.href = 超链接网址
@@ -652,7 +887,7 @@ __/*请输入代码*/
 !ele.scrollLeft =  设置或获取位于对象左边界和窗口中目前可见内容的最左端之间的距离。 
 !ele.scrollTop = 设置或获取位于对象最顶端和窗口中可见内容的最顶端之间的距离。 
 !ele.scrollWidth = 获取对象的滚动宽度。 
-!ele.className = 设置或获取对象的类
+!ele.className = 设置或获取对象的CSS样式类
 !ele.hasChildNodes() = 对象是否有子对象的值。
 !ele.offsetParent = 获取定义对象 offsetTop 和 offsetLeft 属性的容器对象的引用
 !ele.offsetLeft = 相对于offsetParent对象的左侧位置.
@@ -661,17 +896,21 @@ __/*请输入代码*/
 !ele.offsetHeight  = 包括边线的高度 
 !ele.ownerDocument = document.
 !ele.id = 获取标识对象的字符串 
+!ele.uniqueID = 对象自动生成的唯一标识符
 !ele.name = 设置或获取对象的名称 
 !ele.nodeName = 获取特定结点类型的名称。 
 !ele.nodeType = 获取所需结点的类型。 
 !ele.nodeValue = 设置或获取结点的值。 
-!ele.parentElement = 获取对象层次中的父对象。 
-!ele.parentNode = 获取文档层次中的父对象。 
-!ele.readyState = 获取对象的当前状态。 
+!ele.parentElement = 获取对象层次中的父对象\n!ele.
+!ele.parentNode = 获取文档层次中的父对象\n!ele. 
+!ele.childNodes() = !ele. 
+!ele.children() = !ele. 
+!ele.readyState = 获取对象的当前状态。 \n'uninitialized','loading','interactive','loaded' 'complete'
 !ele.sourceIndex = 获取对象在源序中的依次位置，即document.all()中的位置参数. 
 !ele.title = 提示信息
-!ele.all(0__) = 对象所包含的元素集合中指定位置的对象 
-!ele.attributes(0__) = 对象标签属性的集合指定位置的对象  
+!ele.all(0__) = 对象所包含的元素集合中指定位置的对象
+!ele.all() = !ele.
+!ele.attributes("name__/*属性名称*/") = 对象标签属性的集合指定位置的对象  
 !ele.childNodes(0__) =  对象直接后代的 HTML元素和TextNode对象的集合指定位置的对象
 !ele.children(0__) =  获取作为对象直接后代的DHTML对象的集合指定位置的对象 
 !ele.style.background = 背景
@@ -681,26 +920,42 @@ __/*请输入代码*/
 !ele.style.width = 宽度
 !ele.style.top = 顶部位置
 !ele.style.left = 左侧位置
-?.getEle= !ele. 
-?.waitEle= !ele. 
-ele = !ele.
-?.all = !ele. 
+!ele.style.margin = 外边距
+!ele.style.padding = 内边距
+!ele.contentEditable = @.contentEditable = "true__"
+!ele.firstChild =  childNodes集合的第一个子对象的引用\n!ele.
+!ele.lastChild = childNodes集合中最后一个子对象的引用\n!ele.
+!ele.nextSibling = 返回当前节点的兄弟下一个节点(下一个兄弟节点)\n!ele.
+!ele.previousSibling = 返回紧挨当前节点、位于它之前的兄弟节点(上一个兄弟节点)\n!ele.
+!ele.hidefocus = 是否隐藏焦点选框 
+
+!ele.getAttributeNode() = !ele_attribute_node.
+!ele.attributes() = !ele_attribute_node.
+
+!ele_attribute_node.nodeName = 获取特定结点类型的名称
+!ele_attribute_node.nodeType = 获取所需结点的类型
+!ele_attribute_node.nodeValue = 设置或获取结点的值 
+!ele_attribute_node.specified =  获取是否指定了该属性 
+!ele_attribute_node.value =  设置或获取对象的值
+document.open() = 打开一个新的空白文档 
 document.write(__/*输入HTML*/) = 将HTML写入网页,允许追加输出
 document.writeln(__/*输入HTML*/) = 将HTML写入网页,并添加换行符,允许追加输出
 document.close() = 关闭输出流并强制将数据发送到显示
 document.all(1__/*输入序号*/) = 返回指定的节点
+document.all() = !ele.
 document.attachEvent("onclick",__/*指定dispath接口*/) = 绑定DOM事件接口
 document.detachEvent("onclick",__/*指定dispath接口*/) = 消指定函数的绑定
 document.getElementById("__") = 获取对 ID 标签属性为指定值的第一个对象的引用。 
 document.getElementsByName("__") =  根据 NAME 标签属性的值获取对象的集合。 
 document.getElementsByTagName("__") =  获取基于指定元素名称的对象集合。 
 document.title = 网页标题
+document.body = !ele.
 document.URL = 设置或获取当前文档的 URL。 
 document.URLUnencoded = 获取文档的 URL，去除所有字符编码 
 document.domain = 设置或获取文档的安全域名。 
 document.designMode = 文档是否可被编辑\n"on"或"off"
 document.elementFromPoint(x,y__) = 获取该位置的对象
-document.parentWindow = !eleWindow.
+document.parentWindow = !jsGlobal.
 document.documentElement = !ele.
 document.frames.length = 框架数目
 document.frames(1__) = 在框架窗口集合(windows对象)中指定索引的对象
@@ -715,22 +970,30 @@ document.namespaces(1__) =  在所有namespace对象中指定索引的对象
 document.scripts(1__) = 在所有script对象中指定索引的对象
 document.styleSheets(1__) = 在styleSheet对象中指定索引的对象
 document.activeElement = 焦点对象 
-document.script = 可使用此对象直接调用页面脚本中的函数\n注意调用页面脚本函数时必须最少添加一个参数
-?.getElementById = !ele.
-?.getElementsByName = !ele.
-?.getElementsByTagName = !ele.
+document.script = 可使用此对象直接调用页面脚本中的函数\n注意调用页面脚本函数时必须最少添加一个参数\n!jsGlobal. 
+document.createElement("script__") = 创建HTML节点\n可使有ele.appendChild() ele.insertBefore()等函数插入新节点
+document.charSet = 设置页面编码\n使用wb.refresh2(7)刷新生效.
+document.location.href = 当前页面路径
+document.location.reload() =  缓存刷新
+document.location.reload(true) = 等价于按F5刷新
+document.currentViewMode = 本地文件夹查看模式\n1 图标\n3 列表\n4 详细资料\n5 缩略图\n6 平铺\n7 幻灯片
+document.compatMode = "BackCompat" 对应 quirks mode(无DTD声明)\n"CSS1Compat" 对应 strict mode 
+document.selection = 代表了当前激活选中区 
+document.selection.createRange().text = 获中选区内文本  
 !wb.document=document.
-?wb.getDoc=document.
-?wb.waitDoc=document.
+!wb.getScript(__/*框架名*/) = 网页脚本对象
+!wb.getScript()  = !jsGlobal.
+!wb.script = 网页脚本对象\n!jsGlobal.
 !wb.getFrame(__/*框架名*/) = 返回框架窗口对象\n参数可以是框架名,ID,基于0的索引,或者frame节点
 !wb.getDoc(__/*框架名*/) = 获取文档对象\n参数可以是框架名,ID,基于0的索引,或者frame节点
 !wb.waitDoc(__/*框架名*/) = 等待页页文档对象创建\n并获取文档对象  
-!wb.waitDoc("",20000) = 返回一个节点对像\n第三个参数指定超时值(毫秒)
-
+!wb.waitDoc("",20000) = 返回一个节点对象\n第二个参数指定超时值(毫秒))\n如果不需要节点完全加载,可再附加一个false参数
+!wb.attach = @.attach(\n	function(event){\n		io.print("点击坐标", event.screenX,event.screenY )\n		io.print("触发节点", event.srcElement.innerText )\n	}\n	,"onclick__",ele/*也可输入getEle()所需参数,省略表示doc*/ \n)
+!wb.attachAll = @.attachAll(  \n	/* html节点ID = 事件触发函数表 */\n	caption_button_min = {\n		onclick = function(event){\n			wb._form.hitmin();	\n		} \n	}\n)  
+!wb.click(.(控件名字,随机延时最小值,延时最大值,框架名) = 模拟点击控件,\n第一个参数也可以是ele对象,\n随机延时值为可选参数,默认为1,500.\n框架名为可选参数.
+!wb.setEle(.(控件名字,属性值,属性名,框架名) = 更新控件值,\n第一个参数也可以是ele对象,\n属性名,框架名为可选参数.\n属性值可以是一个指定多个属性键值对的table对象.
 !wb.select("控件名字",__/*输入选项索引,或选项值、选项文本*/) = 查找下拉选框的指定选项,选中并返回选项节点\n第一个参数也可以是ele对象
 !wb.select("控件名字",__/*输入选项索引,或选项值、选项文本*/,false) = 查找下拉选框的指定选项,取消选定并返回选项节点\n第一个参数也可以是ele对象
-?.select = !ele.
-
 !wb.exec("__") = 执行命令
 !wb.exec("__", ) = 执行命令
 !wb.exec("__", ,true) = 执行命令
@@ -742,30 +1005,74 @@ document.script = 可使用此对象直接调用页面脚本中的函数\n注意调用页面脚本函数时必
 !wb.external = @.external={
 	__/*输入要公开的成员*/
 }
-!wb.doScript(.(js脚本) =执行js脚本
-!wb.doScript(.(js脚本,框架名称) =执行js脚本
-!wb.doScript(.(js脚本,框架名称,脚本语言名称="javascript") =执行js脚本
+!wb.eventScript = @//可选指定事件名,默认为onclick\nvar js = /**\n	alert( event.srcElement.id );\n**/\n??.eventScript(js,"__/*输入节点ID*/","onclick")
+!wb.doScript = @var js = /**\n	alert("Javascript!");\n**/\n??.doScript(js,__
+
+!wb.doScript(.(js脚本) = 执行js脚本
+!wb.doScript(.(js脚本,框架名称) = 执行js脚本
+!wb.doScript(.(js脚本,框架名称,"javascript__") = 执行js脚本
 !wb.body = !ele.
-!wb.waitEle("__") = 返回一个节点对像或框架内子节点对像\n并等待加载完成
-!wb.getEle("__") = 返回一个节点对像或框架内子节点对像
-!wb.waitEle("__","框架名字") = 返回一个节点对像或框架内子节点对像\n并等待加载完成
-!wb.getEle("__","框架名字") = 返回一个节点对像或框架内子节点对像
-!wb.waitEle("__","",20000) = 返回一个节点对像\n第三个参数指定超时值(毫秒)
+!wb.head = !ele.
+!wb.loadScript("js地址","框架名字") = 动态加载js文件
+!wb.loadScript("js地址","框架名字","utf-8") = 动态加载js文件\N可选用第三个参数指定文件编码
+!wb.jQuery("__") = jQuery选择器,并可自动载入jQuery库\nn首次调用按需加载jQuery v1.63以上版本:\n "/res/js/jQuery/jQuery.min.js"\n失败则通过网络CDN服务器下载jquery-1.6.3.min.js
+!wb.jQuery() = 无参数时返回jQuery类对象\n首次调用按需加载 jQuery v1.63以上版本:\n "/res/js/jQuery/jQuery.min.js"\n失败则通过网络CDN服务器下载jquery-1.6.3.min.js\n!jQuery.
+!jQuery.val() = 取值
+!jQuery.val("__") = 赋值
+!jQuery.hide() = 隐藏
+!jQuery.show() = 显示
+!jQuery.text() = 取innerHTML属性
+!jQuery.text("__") = 修改innerHTML属性
+!jQuery.css("属性__","值") = 添加CSS样式
+!jQuery.load("html文件路径__") = 载入一个文件
+!wb.getEle() = !ele.
+!wb.waitQueryEles(.(查询参数,超时值,时间间隔,节点完全加载) = 第一个参数用于调用wb.queryEles()函数,其他参数可选\n该函数等待wb.queryEles()返回有效节点,\nweb窗体关闭或超时返回null空值
+!wb.waitEle("__") = 返回一个节点对象或框架内子节点对象\n并等待加载完成
+!wb.getEle("__") = 返回一个节点对象或框架内子节点对象
+!wb.waitEle("__","框架名字") = 返回一个节点对象或框架内子节点对象\n并等待加载完成
+!wb.getEle("__","框架名字") = 返回一个节点对象或框架内子节点对象
+!wb.waitEle("__","",20000) = 返回一个节点对象\n第三个参数指定超时值(毫秒)\n如果不需要节点完全加载,可再附加一个false参数
+!wb.getElesByTag("head") = 返回指定标记的所有节点
+!wb.getElesByTag("head","框架名字") = 返回指定标记的所有节点
 !wb.getEles("__") = 返回同名的所有节点,例如\nele = wb.getEles("节点名字");\nele(1).setAttribute("属性名字", "修改第一个节点属性值");
 !wb.getEles("__","框架名字") = 返回同名的所有节点,例如\nele = wb.getEles("节点名字");\nele(1).setAttribute("属性名字", "修改第一个节点属性值");
+!wb.queryEles = @.//可指定任意个属性条件值.支持模式匹配语法\nqueryEles( parent = 可选指定父节点;className = "style2")
 !wb.fromPoint(.(x坐标,y坐标) = 自指定的坐标获取节点
 !wb.fromPoint(.(x坐标,y坐标,框架名) = 自指定的坐标获取节点
 !wb.getPoint(ele__) = x,y=wb.getPoint(ele)\n返回对象的页面坐标
 !wb.getPos(ele__) = x,y,cx,cy = wb.getPos(ele)\n返回对象的窗口客户区坐标
 !wb.getPos(ele__,true) = x,y,cx,cy = wb.getPos(ele)\n返回对象的屏幕坐标
-?wb.fromPoint = !ele.
 ?web.form = !wb.
-
 ?.getWebForm = !wb.
-!wb.getWebForm(__/*框架名字或索引*/) = 将框架转换为web.form对象\n必须调用web.form.util.crossDomain()启用此函数
+!wb.getWebForm(__/*框架名字或索引*/) = 将框架转换为web.form对象\n必须调用web.form.util.crossDomain()启用此函数\n
+!wb.getWebForm() = !wb.
+!wb.queryEles() = !ele. 
+!wb.waitQueryEles() = !ele.
+!wb.waitEle()= !ele.
+!wb.getEles() = !ele.
+!wb.getEle() = !ele. 
+!wb.queryEles() = !ele. 
+!wb.waitQueryEles() = !ele.
+!wb.waitEle()= !ele. 
+!wb.all() = !ele.  
+!wb.getDoc() = document.
+!wb.waitDoc() = document.
+!wb.select() = !ele.
+!wb.jQuery() = !jQuery.
+!wb.fromPoint() = !ele.
+!wb.eachFrames() = !jsGlobal.
+!wb.eachAll() = !ele.
+!wb.eachLinks() = !ele.
+!ele[] = !ele.
+!ele() = !ele.
+document.createElement() = !ele.
+document.getElementById() = !ele.
+document.getElementsByName() = !ele.
+document.getElementsByTagName() = !ele.
+!wb.select() = !ele.
+!wb.getDoc() = document.
+!wb.waitDoc() = document.
 end intellisense******/
-
-
 
  /**intellisense()
 _DLCTL_DLIMAGES=@0x10/*_DLCTL_DLIMAGES*/

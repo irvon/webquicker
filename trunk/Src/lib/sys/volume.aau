@@ -1,4 +1,4 @@
-//卷管理函数
+//volume 分区管理函数
 //Volume Management Functions
 
 namespace sys.volume;
@@ -34,19 +34,17 @@ getDriveType = function(drv){
 getFreeDrive = function(){
 	var dr = GetLogicalDrives();
 	var tab = {}; 
-	for(i=2;32){ 
+	for(i=2;31){ 
 		if( !( dr & (1<<i) ) ){ 
 			return ..string.pack('A'# + i) + ":"  
 		}
 	}	
-}
-
-
-//GetLogicalDriveStrings
-getLogicalDrives = function(){
-	var dr = GetLogicalDrives();
+} 
+  
+getLogicalDrives = function(dr){
+	dr := GetLogicalDrives();
 	var tab = {}; 
-	for(i=0;32){ 
+	for(i=0;31){ 
 		if( dr & (1<<i) ){ 
 			..table.push(tab, ..string.pack('A'# + i) + ":" )
 		}
@@ -54,8 +52,6 @@ getLogicalDrives = function(){
 	return tab;
 }
 
-
-//获取分区信息 //GetVolumeInformationByHandleW
 getInfo = function(drive){
 	var ok,lable,serialNum,maxlen,flag,fsys = GetVolumeInformation(drive[[1]] + ":\",255,255,0,0,0,255,255) ;	
 	if(ok)
@@ -68,8 +64,7 @@ getAllDevice = function(){
 		return ..string.split( ..string.left(device,len-2) ,'\0');
 	}
 }
-
-
+ 
 //路径转为设备名
 getDeviceName = function( filepath ) {  
 	var drive= ..string.left(filepath,2); 
@@ -107,9 +102,44 @@ getPathName = function(device){
 	}
 	
 }
+ 
+class LARGE_INTEGER{
+	INT lowPart;
+	INT highPart;
+}       
+GetDiskFreeSpaceEx = ::Kernel32.api( "GetDiskFreeSpaceExA", "bool(STRING dirName,struct &avaliable,struct &total,struct &free)");
+ 
+import fsys.size; 
+var formatSize = function(longInt,unit,p){
+	longInt.size,longInt.unitSize,longInt.unitName = fsys.size.format( longInt.lowPart,longInt.highPart,unit,p );
+	longInt.formatSize = ..string.concat( longInt.size,longInt.unitName);
+	return longInt;
+}
 
+getSpaceInfo = function(dirName,unit,p=2){ 
+	var ok,avaliable,total,free = GetDiskFreeSpaceEx(dirName,LARGE_INTEGER(),LARGE_INTEGER(),LARGE_INTEGER() );
+	if(ok){
+		return {
+			avaliable = formatSize(avaliable,unit,p);
+			total =  formatSize(total,unit,p);
+			free = formatSize(free,unit,p);
+		}	
+	}
+}
 
 /**intellisense()
+sys.volume.getSpaceInfo("C:\") = 获取分区空间大小, 剩余大小等信息
+sys.volume.getSpaceInfo() = !volumespaceinfo.
+!volumespaceinfo.avaliable = 剩余有效配额大小\n!volumesizeinfo.
+!volumespaceinfo.total = 分区大小\n!volumesizeinfo.
+!volumespaceinfo.free = 剩余大小\n!volumesizeinfo.
+!volumesizeinfo.formatSize = 格式化后表示大小的文本
+!volumesizeinfo.size = 空间大小(unitSize指定单位大小)
+!volumesizeinfo.unitSize = 单位大小
+!volumesizeinfo.unitName = 单位名称
+!volumesizeinfo.lowPart = 字节长度低位 
+!volumesizeinfo.highPart = 字节长度高位
+
 !volumeinfo.drive = 分区路径
 !volumeinfo.serial = 序列号
 !volumeinfo.serialNum = 序列号(数值)

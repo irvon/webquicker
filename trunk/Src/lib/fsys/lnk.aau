@@ -1,4 +1,4 @@
-//快捷方式
+//lnk 快捷方式
 import fsys; 
 import util.metaProperty
 import com.interface.IShellLink;
@@ -34,9 +34,9 @@ class lnk{
 			return false,..lasterr(hr); 
 		return true;
 	}   
-	@metaProperty
+	@_metaProperty
 } 
-lnk.metaProperty = ..util.metaProperty(
+lnk._metaProperty = ..util.metaProperty(
 
 	description = {
 		_get = function(){ 
@@ -122,47 +122,57 @@ end intellisense**/
 
  
 namespace lnk {
- 
-	searchLnk =function(pattern,dir){
-    	pattern = ..string.lower(pattern) 
-    	var lnk = ..fsys.lnk();
-    	var retpath,targetpath;
-    	..fsys.enum( dir, 
-                	"*.lnk", 
-                	function(dir,filename){ 
-                    	if(filename){  
-                    		if( lnk.load(  ..fsys.joinpath(dir,filename) ) ){
-                    			targetpath  =  lnk.path;
-                        		if(..string.find( ..string.lower(targetpath),pattern)){
-                        			retpath = targetpath
-                        			return false;
-                        		}
-                        	}
-                        	else {
-                        		..io.print("失败")
-                        	}
-                        	
-                    	}    
-                	} 
-              	);
-        lnk = null;
+
+	enum = function(dir,proc){
+		var lnk = ..fsys.lnk();
+		var dir = ..fsys.getSpecial(dir);
+		if(!dir)
+			return;
+    	..fsys.enum( dir , 
+            "*.lnk", 
+            function(dir,filename,fullpath){ 
+                if(filename){   
+                    if( lnk.load( fullpath ) ){ 
+                    	return proc( dir,filename,fullpath, ..string.lower(lnk.path) )
+                    } 
+                }    
+            } 
+        )
+        lnk = null;	
+	}
+	  
+	searchLnk =function(pattern,lable,dir){
+    	pattern = pattern ? ..string.lower(pattern)  
+    	var retpath;
+    	enum( dir, 
+            function(dir,filename,fullpath,target){ 
+                target  =  ..string.lower(target);
+                if( ( !lable || ..string.cmp_match( filename,lable ) ) &&  ( !pattern  ||  ..string.find( target,pattern))){
+                    retpath = target 
+                    return false;
+                }    
+            } 
+        ); 
    		return retpath;
 	}
  	
-	search = function(filename){
+	search = function(filename,lable,dir){ 
 		var dir = ..io.localpath("\");
 		
-		return ..fsys.searchFile(filename) 
-			|| searchLnk( filename, ..fsys.getSpecial(0x0000 /*_CSIDL_DESKTOP*/ ) )
-			|| searchLnk( filename, ..fsys.getSpecial(0x0002 /*_CSIDL_PROGRAMS*/  )) 
-			|| searchLnk( filename, ..fsys.getSpecial(0x0019 /*_CSIDL_COMMON_DESKTOPDIRECTORY*/ ) )
-			|| searchLnk( filename, ..fsys.getSpecial(0x0017 /*_CSIDL_COMMON_PROGRAMS*/  )) 
+		return ( filename ? ..fsys.searchFile(filename) )
+			|| searchLnk( filename,lable, 0 /*_CSIDL_DESKTOP*/  )
+			|| searchLnk( filename,lable, 2 /*_CSIDL_PROGRAMS*/ ) 
+			|| searchLnk( filename,lable, 0x19 /*_CSIDL_COMMON_DESKTOPDIRECTORY*/  )
+			|| searchLnk( filename,lable, 0x17 /*_CSIDL_COMMON_PROGRAMS*/ ) 
 	}
 
 }
 
-/**intellisense(fsys.lnk)
-search("__/*文件名*/") = 按下列顺序搜索文件: 桌面快捷方式、应用程序快捷方式、All Users 桌面快捷方式、All Users 应用程序快捷方式
+/**intellisense(fsys.lnk) 
+searchLnk("文件名","快捷方式标题", 0 /*_CSIDL_DESKTOP*/ /) = 在桌面搜索快捷方式并返回路径
+searchLnk("文件名","快捷方式标题", 2 /*_CSIDL_PROGRAMS*/) = 在程序目录搜索快捷方式并返回路径
+search(.("文件名","快捷方式标题") = 全部参数可选,至少输入一个参数\n按下列顺序搜索文件: 桌面快捷方式、应用程序快捷方式\n查找支持模式匹配语法,忽略大小写\n快捷方式标题支持普通文本比较
+enum = @.enum( \n	0 /*_CSIDL_DESKTOP*/ , \n    function(dir,filename,fullpath,target){ \n        /*return false 停止遍历*/  \n    } \n); 
 end intellisense**/
 
 

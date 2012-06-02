@@ -62,7 +62,7 @@ function lasterr() {
 	var msg = message[err] 
 	if(!msg)msg = "Winsock Has Returned Error #" + err;
 	
-	return err,msg; 
+	return msg,err; 
 
 
 }

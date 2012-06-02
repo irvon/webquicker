@@ -2,10 +2,10 @@
 namespace util;
 
 class metaProperty{
-	ctor( meta )begin
+	ctor( meta ){
 		if(type(meta)==type.table)
-			this = meta;//装饰继承模式
-	end;
+			this = meta;
+	};
 	
 	_get = function(k){
 		var t = this[ k]; 
@@ -45,14 +45,23 @@ class metaProperty{
 			return;
 		}
 		owner[[k]] = v;
-	}
-
+	} 
 }
- 
-  
 
-/**intellisense(util)
-metaProperty = 属性元表
-metaProperty(__) = @.metaProperty(\n\n	属性 = {\n		_get = function(){ \n			/*读取属性代码写在这里*/\n			return null;\n		}\n		_set = function( value ){\n			/*写入属性代码写在这里*/\n			..io.print( owner,value)\n		} 	\n	};\n	@{ _get = ..父属性表 } /*属性表可继承*/ \n)
+namespace metaProperty{
+
+	extend = function(cls,...){
+		if( type(cls) == type.class  && cls._metaProperty[["_get"]] ){
+			..table.mixin(cls._metaProperty,...)
+		}
+		else
+			error("不是有效类,或未找到属性表( 类._metaProperty ) ",2)
+	} 
+}
+
+/**intellisense()
+util.metaProperty = 属性元表
+util.metaProperty(__) = @.metaProperty(\n\n	属性 = {\n		_get = function(){ \n			/*读取属性代码写在这里*/\n			return null;\n		}\n		_set = function( value ){\n			/*写入属性代码写在这里*/\n			..io.print( owner,value)\n		} 	\n	};\n	@{ _get = ..父属性表 } /*属性表可继承*/ \n)
+util.metaProperty.extend(.(类对象,一个或多个混入表) = 使用混入表扩展类的属性情\n类名字空间必须定义了_metaProperty静态成员\n并且是一个有效的属性表
 end intellisense**/
-
+ 

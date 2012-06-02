@@ -1,4 +1,4 @@
-
+//md5 编码
 
 var function str2blks(str) { 
 	var nblk = ((#str + 8) >> 6) + 1; 
@@ -151,10 +151,12 @@ class md5{
 		d = safe_add(d, oldd);
 		end;
  		
-		var result32 =  ..raw.convert( {int a = a;int b = b;int c = c;int d = d;}  , {byte arr[16];  } )
+		var data =  ..raw.convert( {int a = a;int b = b;int c = c;int d = d;}  , {byte arr[16];  } ).arr
 		var fm = low?"%02x":"%02X";
+		
+		var result32 = {};
 		for(i=1;16;1){
-			result32[i] = ..string.format(fm,result32.arr[i] & 0xff );
+			result32[i] = ..string.format(fm,data[i] & 0xff );
 		}
 		
 		var result16 ={}
@@ -162,11 +164,12 @@ class md5{
 			result16[i] = result32[i+4]
 		}
 
-		return ..string.join( result32  ) ,..string.join( result16 ) 
+		return ..string.join( result32  ) ,..string.join( result16 ),data
 	} 
 
 }
  
 /*intellisense()
-string.md5(.(字符串,是否小写) = md5加密算法
+string.md5 = md5算法支持库
+string.md5(.(字符串,是否小写) = md5加密算法\n返回三个值: 32位MD5值,16位MD5值,原始MD5字节值
 end intellisense*/

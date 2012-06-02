@@ -1,0 +1,3 @@
+response.cookie["username"] = request.post["username"] or "";
+// ÖØ¶¨Ïò
+response.redirect("../index.aau");

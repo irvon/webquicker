@@ -1,0 +1,423 @@
+/* 翻译自 PHPLIB Template 类 */
+import fsys;
+
+template = class {
+
+	ctor (root = ".", unknowns = "remove") {
+		var response = ..response;
+		var fsys = ..fsys;
+		var string = ..string;
+		var io = ..io;
+		
+		// 决定应该输出多少调试信息
+		// 下面是可以使用的等级（二进制位，可组合）:
+		// 0 = 没有输出
+		// 1 = 当定义变量的时候输出
+		// 2 = 当取得变量的时候输出
+		// 4 = 调用所有函数的时候都输出（包括参数）
+		this.debug = 0;
+		
+		// 模板文件根目录
+		// @set_root
+		this.root = ".";
+		
+		// 变量名 - 文件路径表
+		// 将变量名转换为文件路径
+		// file["varname"] = "filename"
+		this.file = {};
+		
+		// 储存变量名和变量名在模式匹配中可用的表达式
+		// varkeys["varname"] = "@{varname}"
+		// @set_var
+		this.varkeys = {};
+		
+		// 储存变量名 - 值
+		// varvals["varname"] = "value"
+		// @set_var
+		this.varvals = {};
+		
+		// 决定应该怎样处理没有定义值的变量标签
+		// @set_unknowns
+		this.unknowns = unknowns;
+		
+		// 决定当出错时模板类怎样处理
+		// "yes"	= 输出错误，并且停止执行
+		// "report"	= 输出错误，返回 false 后继续执行
+		// "no"		= 错误被忽略，返回 false 后继续执行
+		// @halt
+		this.halt_on_error = "yes";
+		
+		// 最新的错误信息
+		// @halt
+		this.last_error = "";
+		
+		if (this.debug & 4) {
+			response.write("<p><b>Template:</b> root = " + root + ", unknowns = " + unknowns + "</p>" + '\n');
+		}
+		
+		// 检测 root 是否是一个有效的文件夹，如果是，则设置到 this.root 中
+		// 来表示应当从哪里读取模板
+		// 成功返回 true，失败返回 false
+		this.set_root = function (root) {
+			if (this.debug & 4) {
+				response.write("<p><b>set_root:</b> root = " + root + "</p>" + '\n');
+			}
+			if (!fsys.isDir(root)) {
+				this.halt("set_root: " + root + " is not a directory.");
+				return false;
+			}
+			
+			this.root = root;
+			return true;
+		}
+		
+		this.set_root(root);
+	}
+	
+	// unknowns 决定应该怎样处理没有定义值的变量标签
+	// "remove"		= 删除未定义的变量
+	// "comment"	= 将未定义的变量替换为注释
+	// "keep"		= 保留未定义的变量
+	set_unknowns = function (unknowns) {
+		if (this.debug & 4) {
+			response.write("<p><b>unknowns:</b> unknowns = " + unknowns + "</p>" + '\n');
+		}
+		this.unknowns = unknowns;
+	}
+	
+	// 设置一个变量的文件名
+	// 可以传入两个字符串，也可以传入一个 table（键和值分别是变量名和文件名）
+	//
+	// 存储在 this.file 中
+	// 调用该函数后，文件并不会被立即载入，该文件只会在需要的时候被载入
+	//
+	// 成功返回 true，失败返回 false
+	// set_file(varname, filename)
+	// set_file({ [varname] = filename; })
+	set_file = function (varname, filename = "") {
+		if (type(varname) != type.table) {
+			if (this.debug & 4) {
+				response.write("<p><b>set_file:</b> (with scalar) varname = " + varname + ", filename = " + filename + "</p>" + '\n');
+			}
+			if (filename == "") {
+				this.halt("set_file: For varname $varname filename is empty.");
+				return false;
+			}
+			this.file[varname] = filename;
+		} else {
+			for (v, f in varname) {
+				if (this.debug & 4) {
+					response.write("<p><b>set_file:</b> (with array) varname = " + v + ", filename = " + f + "</p>" + '\n');
+				}
+				if (f == "") {
+					this.halt("set_file: For varname $v filename is empty.");
+					return false;
+				}
+				this.file[v] = f;
+			}
+		}
+		return true;
+	}
+	
+	// 变量 parent 将包含一个变量块，变量块的声明方式如下：
+	// <!-- BEGIN varname -->内容<!-- END varname -->
+	// 该函数从 parent 中移除这个块并且将其替换为 name 所提供的变量名
+	// 该块将被加入到 this.varkeys 和 this.varvals 中
+	// 如果 name 参数被省略，则 name 的值被看作与 varname 相同
+	//
+	// 块可以被嵌套，但要注意到是，提取块时是由内向外的
+	//
+	// 成功返回真，失败返回假
+	set_block = function (parent, varname, name = "") {
+		if (this.debug & 4) {
+			response.write("<p><b>set_block:</b> parent = " + parent + ", varname = " + varname + ", name = " + name + "</p>" + '\n');
+		}
+		if (!this.loadfile(parent)) {
+			this.halt("set_block: unable to load " + parent + ".");
+			return false;
+		}
+		if (name == "") {
+			name = varname;
+		}
+		
+		var str = this.get_var(parent);
+		var reg = "[\s\t]*\<\!\-\-\s+BEGIN " + varname + "\s+\-\-\>\s*?\n?(\s*.*?\n?)\s*\<\!\-\-\s+END " + varname + "\s+\-\-\>\s*?\n?";
+		var m = string.match(str, reg);
+		str = string.replace(str, reg, "{" + name + "}");
+		this.set_var(varname, m);
+		this.set_var(parent, str);
+		return true;
+	}
+	
+	// 该函数设置变量的值
+	// 可以传入两个字符串，也可以传入一个 table（键和值分别是变量名和值）
+	// set_var(varname, value, append = false)
+	// set_var({ [varname] = value; }, dummy_var, append)
+	set_var = function (varname, value = "", append = false) {
+		if (type(varname) != type.table) {
+			if (varname) {
+				if (this.debug & 1) {
+					response.write(string.format("<b>set_var:</b> (with scalar) <b>%s</b> = '%s'<br>" + '\n', varname, value));
+				}
+				this.varkeys[varname] = "@{" + varname + "}";
+				if (append && this.varkeys[varname]) {
+					this.varvals[varname] = this.varkeys[varname] + value;
+				} else {
+					this.varvals[varname] = value;
+				}
+			}
+		} else {
+			for (k, v in varname) {
+				if (k) {
+					if (this.debug & 1) {
+						response.write(string.format("<b>set_var:</b> (with array) <b>%s</b> = '%s'<br>" + '\r\n', k, v));
+					}
+					this.varkeys[k] = "@{" + v + "}";
+					if (append && this.varkeys[k]) {
+						this.varkeys[k] = this.varkeys[k] + v;
+					} else {
+						this.varkeys[k] = v;
+					}
+				}
+			}
+		}
+	}
+	
+	// 该函数清空变量的值
+	// 可以传入字符串，也可以传入一个 table 作为变量名
+	//
+	// 调用此函数后，将设置 this.varkeys 和 this.varvals 中指定的成员值为 ""
+	// 调用此函数前无需检查变量名是否存在
+	// 
+	// clear_var(varname)
+	// clear_var({ varname })
+	clear_var = function (varname) {
+		if (type(varname) != type.table) {
+			if (varname) {
+				if (this.debug & 1) {
+					response.write("<b>clear_var:</b> (with scalar) <b>" + varname + "</b><br>" + '\n');
+				}
+				this.set_var(varname, "");
+			}
+		} else {
+			for (k, v in varname) {
+				if (v) {
+					if (this.debug & 1) {
+						response.write("<b>clear_var:</b> (with array) <b>" + v + "</b><br>" + '\n');
+					}
+					this.set_var(v, "");
+				}
+			}
+		}
+	}
+	
+	unset_var = clear_var; // 暂时
+	
+	subst = function (varname) {
+		if (this.debug & 4) {
+			response.write("<p><b>subst:</b> varname = " + varname + "</p>" + '\n');
+		}
+		if (!this.loadfile(varname)) {
+			this.halt("subst: unable to load " + varname + ".");
+			return false;
+		}
+		
+		var str = this.get_var(varname);
+		for (k, v in this.varvals) {
+			str = string.replace(str, this.varkeys[k], v);
+		}
+		return str;
+	}
+	
+	psubst = function (varname) {
+		if (this.debug & 4) {
+			response.write("<p><b>psubst:</b> varname = " + varname + "</p>" + '\n');
+		}
+		response.write(this.subst(varname));
+		
+		return false;
+	}
+	
+	parse = function (target, varname, append = false) {
+		if (type(varname) != type.table) {
+			if (this.debug & 4) {
+				response.write("<p><b>parse:</b> (with scalar) target = " + target + ", varname = " + varname + ", append = " + tostring(append) + "</p>" + '\n');
+			}
+			var str = this.subst(varname);
+			if (append) {
+				this.set_var(target, this.get_var(target) + str);
+			} else {
+				this.set_var(target, str);
+			}
+		} else {
+			for (i, v in varname) {
+				if (this.debug & 4) {
+					response.write("<p><b>parse:</b> (with array) target = " + target + ", i = " + i + ", varname = " + v + ", append = " + tostring(append) + "</p>" + '\n');
+				}
+				var str = this.subst(v);
+				if (append) {
+					this.set_var(target, this.get_var(target) + str);
+				} else {
+					this.set_var(target, str);
+				}
+			}
+		}
+		
+		if (this.debug & 4) {
+			response.write("<p><b>parse:</b> completed</p>" + '\n');
+		}
+		return str;
+	}
+	
+	pparse = function (...) {
+		if (this.debug & 4) {
+			response.write("<p><b>pparse:</b> passing parameters to parse...</p>" + '\n');
+		}
+		response.write(this.parse(...));
+		return false;
+	}
+	
+	get_vars = function () {
+		if (this.debug & 4) {
+			response.write("<p><b>get_vars:</b> constructing array of vars...</p>" + '\n');
+		}
+		return table.copy(this.varkeys);
+	}
+	
+	get_var = function (varname) {
+		if (type(varname) != type.table) {
+			var str = this.varvals[[varname]] or "";
+			if (this.debug & 2) {
+				response.write(string.format("<b>get_var</b> (with scalar) <b>%s</b> = '%s'<br>" + '\n', varname, str));
+			}
+			return str;
+		} else {
+			var result = {};
+			for (k, v in varname) {
+				var str = this.varvals[[v]] or "";
+				if (this.debug & 2) {
+					response.write(string.format("<b>get_var:</b> (with array) <b>%s</b> = '%s'<br>" + '\n', v, str));
+				}
+				result[v] = str;
+			}
+			return result;
+		}
+	}
+	
+	get_undefined = function (varname) {
+		if (this.debug & 4) {
+			response.write("<p><b>get_undefined:</b> varname = " + varname + "</p>" + '\n');
+		}
+		if (!this.loadfile(varname)) {
+			this.halt("get_undefined: unable to load " + varname + ".");
+			return false;
+		}
+		
+		var result = {};
+		for (m in string.gmatch(this.get_var(varname), "{([^\s\t\r\n}]+)}")) { 
+			if (!this.varkeys[[m]]) {
+				if (this.debug & 4) {
+					response.write("<p><b>get_undefined:</b> undefined: " + m + "</p>" + '\n');
+				}
+				result[m] = m;
+			}
+		}
+		
+		if (table.count(result)) {
+			return result;
+		} else {
+			return false;
+		}
+	}
+	
+	finish = function (str) {
+		select (this.unknowns) {
+			case "keep" {
+			}
+			case "remove" {
+				str = string.replace(str, "{([^\s\t\r\n}]+)}", "");
+			}
+			case "comment" {
+				str = string.replace(str, "{([^\s\t\r\n}]+)}", "<!-- Template variable \1 undefined -->");
+			}
+		}
+		
+		return str;
+	}
+	
+	p = function (varname) {
+		response.write(this.finish(this.get_var(varname)));
+	}
+	
+	get = function (varname) {
+		return this.finish(this.get_var(varname));
+	}
+	
+	filename = function (filename) {
+		if (this.debug & 4) {
+			response.write("<p><b>filename:</b> filename = " + filename + "</p>" + '\n');
+		}
+		if (string.sub(filename, 1, 1) != "/") {
+			filename = this.root + "/" + filename;
+		}
+		
+		if (!io.exist(filename)) {
+			this.halt("filename: file " + filename + " does not exist.");
+		}
+		return filename;
+	}
+	
+	loadfile = function (varname) {
+		if (this.debug & 4) {
+			response.write("<p><b>loadfile:</b> varname = " + varname + "</p>" + '\n');
+		}
+		
+		if (!this.file[[varname]]) {
+			if (this.debug & 4) {
+				response.write("<p><b>loadfile:</b> varname " + varname + " does not reference a file</p>" + '\n');
+			}
+			return true;
+		}
+		
+		if (this.varvals[[varname]]) {
+			if (this.debug & 4) {
+				response.write("<p><b>loadfile:</b> varname " + varname + " is already loaded</p>" + '\n');
+			}
+			return true;
+		}
+		var filename = this.filename(this.file[varname]);
+		
+		var str = string.load(filename);
+		if (str == "") {
+			this.halt("loadfile: While loading " + varname + ", " + filename + " does not exist or is empty.");
+			return false;
+		}
+		
+		if (this.debug & 4) {
+			response.write("<b>loadfile:</b> loaded " + filename + " into " + varname + "<br>" + '\n');
+		}
+		this.set_var(varname, str);
+		
+		return true;
+	}
+	
+	halt = function (msg) {
+		this.last_error = msg;
+		
+		if (this.halt_on_error != "no") {
+			this.haltmsg(msg);
+		}
+		
+		if (this.halt_on_error == "yes") {
+			response.write("<b>Halted.</b>");
+			response.close();
+		}
+		
+		return false;
+	}
+	
+	haltmsg = function (msg) {
+		response.write("<b>Template Error:</b> " + msg + "<br>" + '\n');
+	}
+	
+}

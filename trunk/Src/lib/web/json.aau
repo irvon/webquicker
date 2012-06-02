@@ -1,19 +1,28 @@
-/************************************
-Author		: namwonsta
-Time		: July 11, 2010
-Version		: V1.4.0.0001
-Description     : JSON.编码解码工具
-************************************/
+//json 编解码
+
+/*
+Author: namwonsta
+*/
 
 namespace web.json
-var push = ..table.push; 
+var push = ..table.push;
+var indexAny = ..string.indexAny;
+var find = ..string.find;
+var sub = ..string.sub;
+var match = ..string.match;
+var replace = ..string.replace;
+var concat = ..string.concat;
+var join = ..string.join;
+var format = ..string.format;
+var repeat = ..string.repeat;
+var fromUnicode = ..string.fromUnicode;
 
 var scanWhiteSpace = function(s,pos){
 	if(!#s)return;
 	var whiteSpace = '\t \n\r';//空格不能放在字串起始处
  
 	for(i=1;#s){
-	    if( not ..string.indexAny(  whiteSpace , s[pos])  )
+	    if( not indexAny(  whiteSpace , s[pos])  )
 	       break;
 	    pos ++;
 	}
@@ -22,12 +31,12 @@ var scanWhiteSpace = function(s,pos){
 }
 
 var scanComment = function(str,pos){ 
-	var endPos = ..string.find(str,"*/",pos+2);
+	var endPos = find(str,"*/",pos+2);
 	assert(endPos != null,"Unterminated comment in string at "+pos);
 	return endPos+2;
 }
 
-var scanObject = function(str,pos){ 
+var scanObject = function(str,change,pos){ 
 	var object = {}; //返回值
 	var len = #str;
 	var key,value; 
@@ -54,23 +63,23 @@ var scanObject = function(str,pos){
 	    }
 	    else{	    
 	    	//扫描key
-			key,pos = decode(str,pos);
-			if(pos>len)
-				error("json格式错误 - 读取key时溢出",2)
+			key,pos = parse(str,change,pos);
+			if(pos>len || !key)
+				error("json格式错误 - 读取key时溢出" ,2)
 	    	 
 	    	pos = scanWhiteSpace(str,pos);	    
 	    	if( str[pos] != ':'#)
-	    		error("json格式错误 - 预期':',靠近:" + ..string.sub(str,pos,pos+10),2)
+	    		error("json格式错误 - 预期':',靠近:" + sub(str,pos,pos+10),2)
 	 
 	    	pos = scanWhiteSpace(str,pos+1);	 
-	    	value,pos = decode(str,pos);
+	    	value,pos = parse(str,change,pos);
 	    	object[key] = value;
 	    }
 	}while(true)
 }
 
 var ind=0;
-var scanArray = function(str,pos){ 
+var scanArray = function(str,change,pos){ 
 	var array = {}; 
 	var strLen = #str; 	
 	pos ++; 
@@ -87,7 +96,7 @@ var scanArray = function(str,pos){
 	    if(str[pos] == '/'# && str[pos+1] == '*'# ){
 	    	pos = scanComment(str,pos);
 	    }else{
-	    	object,pos = decode(str,pos); 
+	    	object,pos = parse(str,change,pos); 
 	    	push(array,object);
 	    }
 	} 
@@ -95,8 +104,8 @@ var scanArray = function(str,pos){
 }
  
 
-var scanString = function(str,pos=1){ 
-	//..io.print( str,pos)
+var scanString = function(str,change,pos=1){ 
+ 
 	var startChar = str[pos + 0 /*非数字强制出错*/]; 
 	if(str[pos+1]==startChar)
 		return "",pos+2;
@@ -112,43 +121,80 @@ var scanString = function(str,pos=1){
 		}
 		endPos = i;
 		
+	}
+	var s = sub(str,pos+1,endPos);
+	if(change){
+		s = decodeString(s);
 	} 
-	return ..string.sub(str,pos+1,endPos),endPos+2;
+	
+	return s,endPos+2;
 }
 
-
+self.null = ..raw.malloc(1)
+self.null@ = { 
+	_tostring = function(){return "null";}
+	_topointer = function(){return null;}
+	_tonumber = function(){return 0;}  
+}
 var consts = {
 	["true"] = true;
 	["false"] = false; 
-	}; 
+	["null"] = self.null;
+};  
+
 var scanConstant = function(str,pos){ 
 	if(str[pos]==','#)
 		return null,pos;
-	
-	var nextStr = 	..string.sub(str,pos); 	
+	 
+	var nextStr = 	sub(str,pos); 	
 	var n,l = tonumber( nextStr );
     if(n!==null) return n,pos+l;
 	
-    
-    var token = ..string.match(nextStr,"^\a+")
+   
+    var token = match(nextStr,"^\a+")
+ 
     if( token ){ 
-    	var const = consts[token];
+    	var const = consts[token]; 
+    	if( const===null )
+    		error('json格式错误 \n' + sub(str,pos),3 ) 
+    		
     	return const,pos+#token; 
     }  
     
-	error("json格式错误"+..string.sub(str,pos),3)
+	error("json格式错误"+sub(str,pos),3)
 }
 
+var tDecode = {
+	['b'] = '\b';
+	['f'] = '\f';
+	['n'] = '\n';
+	['r'] = '\r';
+	['t'] = '\t';
+	['"'] = '"';
+	["\"] = "\";
+	["/"] = "/";
+}; 
+decodeString = function(s){
+	s = replace( s, "<\\u\x\x\x\x>+", 
+    	function(u){
+        	return fromUnicode( eval("'" + u + "'"))
+    	}
+	)  
+	return replace(s, "\\(.)",tDecode); 
+} 
 
-var toJsonString = function(v){
+var toJsonString = function(v,fm){
     select(type(v)) {
     	case type.table {
-        	return encode(v);
+        	return stringify(v,fm);
     	} 
     	case type.string{ 
-    		v = ..string.replace(v,"'","\\'");
-        	v = ..string.replace(v,"\z","\\0");
-        	return ..string.concat("'",v,"'"); 
+    	    v = replace(v, "@\","\\");
+    		v = replace(v,'@"','\\"');
+        	v = replace(v,"\z","\\0");
+        	v = replace(v, "\t","\\t");
+        	v = replace(v, "\r\n","\\r\\n");
+        	return concat('"',v,'"'); 
     	} 
     	else{
         	return  tostring(v)
@@ -157,56 +203,77 @@ var toJsonString = function(v){
     }
 }
 
-
-encode = function(tab) {
+var levels = 0;
+var indent = '\32\32\32\32';
+stringify = function(tab,fm) {
 	if( type(tab) != type.table )
 		error("参数必须是table对象",2)
+	
+	var LFCR = "";
+	var curIndent;
+	if(fm){
+		levels++;
+		LFCR = '\r\n';
+		curIndent = repeat(levels,indent);
+	}
 		
 	var len = #tab;  
 	if(len){ 
 		var array = {}
 		for(i=1;len ){ 
-   			push( array, toJsonString( tab[i] ) );
+			var s = ( fm ? concat( curIndent, toJsonString( tab[i],fm ) ) : toJsonString( tab[i] ) );
+   			push( array, s );
 		} 
-		
-   		return ..string.concat("[",..string.join( array,"," ), "]");
+		if(fm){
+			levels--;
+			curIndent = repeat(levels,indent);
+		}
+   		return concat("[", LFCR, join( array, ","+LFCR ), LFCR, curIndent, "]");
 	}
 	
 	var map = {}
 	for(k,v in tab){
    		if( (type(k)==type.string)  ){  
    			push( map
-   				, ..string.concat(	toJsonString( k ) ,":",toJsonString( v ) )
+   				, concat( curIndent, toJsonString( k,fm ), ":", toJsonString( v,fm ) )
    				);
    		}
 	} 
-	return  ..string.concat("{" ,..string.join( map,"," ) ,"}" );
-
+	if(fm){
+		levels--;
+		curIndent = repeat(levels,indent);
+	}
+	return  concat("{", LFCR, join( map, ","+LFCR ), LFCR, curIndent, "}" );
 }
 
-
-decode = function(str,pos=1){
+parse = function(str,change=true,pos=1){
 	if(!str)
 		error("参数为空值",2)
 	pos = scanWhiteSpace(str,pos); 
 
     select(str[pos]) {
     	case '{'# //JSON对象 
-       		return scanObject(str,pos);
+       		return scanObject(str,change,pos);
     	case '['# //JSON数组 
-    		return scanArray(str,pos); 
+    		return scanArray(str,change,pos); 
     	case '\"'#,'\''# 
-    		return scanString(str,pos);
-    	case '/'#
+    		return scanString(str,change,pos);
+    	case '/'#{
     		if(str[pos+1] == '*'#)
-    		return scanComment(str,pos); 
+    			return scanComment(str,pos); 
+    	}
     }
-	  
+
 	return scanConstant(str,pos);
 }
 
-
-/**intellisense()
-web.json.decode(__/*json数据*/) = json数据转换为table
-web.json.encode(__/*table对象*/ = 转换为json数据
+//兼容旧版
+encode = stringify;
+decode = parse;
+ 
+/**intellisense() 
+web.json.decodeString(__/*json数据*/) = unnicode转义串转换为string;
+web.json.stringify(__/*table对象*/,true) = 转换为json数据,\n第2个参数设置是否格式化输出 
+web.json.parse(__/*json数据*/) = json数据转换为table;
+web.json.null = 表示JSON中的null空值.
 end intellisense**/
