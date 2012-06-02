@@ -1,0 +1,9 @@
+if (!_BASEPATH) exit("No direct script access allowed");
+
+_DB_NAME		= "aaublog";
+_DB_PREFIX		= "ab_";
+_DB_USER		= "root";
+_DB_PASSWORD	= "123456";
+_DB_HOST		= "localhost";
+_DB_PORT		= 3306;
+_DB_CHARSET		= "utf8";

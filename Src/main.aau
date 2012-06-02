@@ -1,6 +1,8 @@
 // 当前该框架尚处于测试阶段，请勿在实际工程中使用
 // http://localhost
 
+_DEBUG = true;
+
 // import debug.log;
 namespace debug.log {
 	write = function () {};
@@ -9,6 +11,7 @@ namespace debug.log {
 
 import webquicker.service;
 
+/*初始化{{*/
 var hServiceStatus;
 var SERVICE_STATUS = webquicker.service.SERVICE_STATUS();
 webquicker.service.MAIN_SERVICE_STATUS = SERVICE_STATUS;
@@ -57,15 +60,19 @@ serviceMain = function (dwArgc, lpszArgv) {
 		} else {
 			SERVICE_STATUS.dwCurrentState = 0x4/*_SERVICE_RUNNING*/;
 		}
+		SERVICE_STATUS.dwWin32ExitCode = 0x0/*_NO_ERROR*/;
 	} else {
 		SERVICE_STATUS.dwCurrentState = 0x2/*_SERVICE_START_PENDING*/;
+		SERVICE_STATUS.dwWin32ExitCode = -1;
 	}
 	
 	SERVICE_STATUS.dwServiceType = 0x20/*_SERVICE_WIN32_SHARE_PROCESS*/
-	SERVICE_STATUS.dwControlsAccepted = 0x4 | 0x1/*_SERVICE_ACCEPT_SHUTDOWN | _SERVICE_ACCEPT_STOP*/;
-	SERVICE_STATUS.dwWin32ExitCode = 0x0/*_NO_ERROR*/;
+	SERVICE_STATUS.dwControlsAccepted = 0x4 | 0x1/*_SERVICE_ACCEPT_SHUTDOWN | _SERVICE_ACCEPT_STOP*/
 	
 	webquicker.service.SetServiceStatus(hServiceStatus, SERVICE_STATUS);
+	if (SERVICE_STATUS.dwWin32ExitCode != 0x0/*_NO_ERROR*/) {
+		::ExitProcess(SERVICE_STATUS.dwWin32ExitCode);
+	}
 	debug.log.write("SetServiceStatus");
 	debug.log.flush();
 }
@@ -85,9 +92,9 @@ startService = function () {
 	// 读取配置文件
 	settings = {};
 	var ini = fsys.ini("/config/config.ini");
-	settings["port"] = tonumber(ini.read("Settings", "Port", "80"));
-	settings["maxThreadCount"] = tonumber(ini.read("Settings", "MaxThreadCount", "20"));
-	settings["wwwroot"] = ini.read("Settings", "DocumentDirectory", "/public_html/");
+	settings["port"] = tonumber(ini.read("Server", "Port", "80"));
+	settings["maxThreadCount"] = tonumber(ini.read("Server", "MaxThreadCount", "20"));
+	settings["wwwroot"] = ini.read("Server", "DocumentDirectory", "/public_html/");
 	debug.log.write(table.tostring(settings));
 	
 	import webquicker.server;
@@ -100,6 +107,7 @@ startService = function () {
 	}
 	return !hasError;
 }
+/*}}*/
 
 // 处理函数（在子线程中）
 accept = function (hSocket, settings) {
@@ -107,13 +115,28 @@ accept = function (hSocket, settings) {
 	import fsys.file;
 	import webquicker.parser;
 	
-	var ret = false;
+	var data = "";
+	var len, buffer;
 	
-	var len, data = wsock.recv(hSocket, 2048, 2048, 0);
-	data = string.left(data, len);
+	while (!string.endWith(data, '\r\n\r\n') && !string.endWith(data, '\n\n')) {
+		len, buffer = wsock.recv(hSocket, 1, 1, 0);
+		if (len <= 0) {
+			break;
+		}
+		data = data + buffer;
+	}
 	
 	var info = webquicker.parser.parseRequest(data);
-	response = webquicker.parser.response(hSocket);
+	
+	// 如果有附加的数据(POST)
+	var contentLength = tonumber(info.header[["Content-Length"]] or "0");
+	if (contentLength) {
+		len, buffer = wsock.recv(hSocket, contentLength, contentLength, 0);
+		data = data + buffer;
+		info = webquicker.parser.parseRequest(data);
+	}
+	
+	response = webquicker.parser.response(hSocket, self);
 	request = info;
 	
 	// 错误处理
@@ -131,7 +154,9 @@ accept = function (hSocket, settings) {
 	
 	// 执行 aau
 	loadPage = function (path) {
-		var realPath = fsys.joinpath(io.fullpath(settings["wwwroot"]), path + ".aau");
+		var realPath = string.sub(path, 2, 2) == ":" ? path : fsys.joinpath(io.fullpath(settings["wwwroot"]), path + ".aau");
+		realPath = string.replace(realPath, "\\", "/");
+		realPath = string.replace(realPath, "/+", "/");
 		if (!io.exist(realPath)) {
 			err_404();
 		} else {
@@ -150,34 +175,55 @@ accept = function (hSocket, settings) {
 		}
 	}
 	
+	// 释放资源
+	self["_RELEASE "] = function () {
+		for (k, v in self) {
+			if (!SELF_TABLE[k] && type(self[k]) == type.table) {
+				self[k] = null;
+			}
+		}
+		SELF_TABLE = null;
+		collectgarbage();
+	}
+	
 	var flag = false;
+	
+	SELF_TABLE = {};
 	
 	if (info.requireRedirect) {
 		response.redirect(info.url);
 	} else {
-		// 自动寻找首页
-		if (string.endWith(info.url, "/")) {
-			// 严格按照顺序
+		var fullpath = fsys.joinpath(io.fullpath(settings["wwwroot"]), info.url);
+		
+		if (!string.endWith(info.url, "/") && fsys.isDir(fullpath)) {
+			response.redirect_301(info.url + "/");
+			response.flush();
+		}
+		elseif (string.endWith(info.url, "/")) {
+			// 自动寻找首页，严格按照顺序
 			for (i = 1; #webquicker.parser.indexes) {
-				if (io.exist(fsys.joinpath(io.fullpath(settings["wwwroot"]), info.url + webquicker.parser.indexes[i]))) {
+				if (io.exist(fullpath + webquicker.parser.indexes[i])) {
 					info.url += webquicker.parser.indexes[i];
 					break;
 				}
 			}
 		}
 		
-		// 防止 ../ 读取到 Web 根目录以外的文件
-		if (!string.startWith(fsys.joinpath(io.fullpath(settings["wwwroot"]), info.url), io.fullpath(settings["wwwroot"]))) {
+		fullpath = fsys.joinpath(io.fullpath(settings["wwwroot"]), info.url);
+		
+		// 对于不存在的文件，返回 404 错误
+		if (!string.startWith(fullpath, io.fullpath(settings["wwwroot"]))
+			|| !io.exist(fullpath) || fsys.isDir(fullpath)) {
 			err_404();
 		} else {
 			var tpath = io.splitpath(info.url);
 			if (string.lower(tpath.ext) == ".aau") {
-				// 脚本文件，执行
-				try {
-					loadPage(tpath.dir + tpath.name);
-				} catch (e) {
-					err_500(e or "Unknown");
+				// 先记录 self 里所有的变量，以便最后释放资源
+				for (k, v in self) {
+					SELF_TABLE[k] = k;
 				}
+				// 脚本文件，执行
+				loadPage(tpath.dir + tpath.name);
 			} else {
 				// MIME
 				response.header["Content-Type"] = "application/stream";
@@ -188,7 +234,7 @@ accept = function (hSocket, settings) {
 				}
 				
 				// 打开文件
-				var file = fsys.file(fsys.joinpath(io.fullpath(settings["wwwroot"]), info.url));
+				var file = fsys.file(fullpath);
 				if (file) {
 					// 最后修改日期
 					var fileTime = file.getFileTimes();
@@ -211,9 +257,8 @@ accept = function (hSocket, settings) {
 					} else {
 						t.addhour(-8); // GMT +0:00
 						response.header["Last-Modified"] = tostring(t);
-						
 						// 发送回复头
-						var bytesTotal = file.size;
+						var bytesTotal = file.size();
 						var responseHeader = response.makeResponseHeader(bytesTotal);
 						wsock.send(hSocket, responseHeader, #responseHeader, 0);
 						file.seek("set");
@@ -229,23 +274,33 @@ accept = function (hSocket, settings) {
 						
 						flag = true;
 					}
-				} else {
-					if (!string.endWith(info.url, "/") && io.exist(fsys.joinpath(io.fullpath(settings["wwwroot"]), info.url + "/"))) {
-						response.redirect(info.url + "/");
-					} else {
-						err_404();
-					}
 				}
 			}
 		}
 	}
-		
+	
 	// 如果非后台脚本文件，则采用一次性发送的形式
 	if (!flag && !response.closed) {
+		if (#SELF_TABLE) {
+			// 释放全局变量
+			self["_RELEASE "]();
+		}
+		
 		response.flush();
 	}
-	
-	return ret;
 }
 
-init();
+if (!_DEBUG) {
+	io.print = function () {
+	
+	}
+	init();
+} else {
+	io.open();
+	startService();
+	import key;
+	while (!key.getStateX("ESC")) {
+		sleep(100);
+	}
+	io.close();
+}

@@ -1,0 +1,50 @@
+/* 页面管理 */
+
+_baseurl = "/examples/blog";
+
+load_class("nav.function", "admin.class");
+
+replace_tags = function (str) {
+	if (string.find(str, "{baseurl}")) {
+		str = string.replace(str, "{baseurl}", "/examples/blog"); // 网页标题
+	}
+	if (string.find(str, "{login_info}")) {
+		str = string.replace(str, "{login_info}", get_login_info()); // 管理登录
+	}
+	return str;
+}
+
+load_template = function (name) {
+	return replace_tags(string.load("examples/blog/template/" + name + ".tpl"));
+}
+
+write_header = function (title, nav) {
+	var str = load_template("header");
+	if (string.find(str, "{title}")) {
+		str = string.replace(str, "{title}", string.fromto(title, 0, 65001)); // 网页标题
+	}
+	if (string.find(str, "{nav_list}")) {
+		str = string.replace(str, "{nav_list}", get_nav_list(nav)); // 网页导航
+	}
+	response.write(str);
+}
+
+write_footer = function () {
+	var str = load_template("footer");
+	str = replace_tags(str);
+	response.write(str);
+}
+
+get_login_info = function () {
+	var admin = class_admin();
+	var is_login, admin_info = admin.is_admin_login();
+	if (!is_login) {
+		return string.fromto("<a href=""" + _baseurl + "/admin/login.aau"">登录</a>", 0, 65001);
+	} else {
+		return admin_info.name + string.fromto(string.format(
+			"，你好。<a href=""%s"">发表文章</a> <a href=""%s"">退出</a>",
+			_baseurl + "/addentry.aau",
+			_baseurl + "/admin/login.aau?action=logout"
+		), 0, 65001);
+	}
+}

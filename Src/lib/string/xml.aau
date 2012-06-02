@@ -1,23 +1,26 @@
-//简单xml解析
+//xml 轻量xml解析
 namespace string;
 
 var push = ..table.push;
 var pop = ..table.pop;
 var sub = sub;
 var trim = trim;
+var find = find;
+var match = match;
+var sub = sub;
 
 var function parseProperties (ele, str) { 
 	replace(
 		str, 
-		"(\w+)\s*=\s*([""'])(.+?)\2", 
+		"(\w+)\s*=\s*([""'])(.*?)\2", 
 		function (w, a, b){
     		ele[w] = b
 		} 
 	) 
 }
 
-var function pushElemet(parent,ele){
-	parent[ele.tag] = parent[ele.tag] or {};
+var function pushEle(parent,ele){
+	parent[ele.tag] = type(parent[ele.tag])==type.table?parent[ele.tag]:{};
 	push( parent[ele.tag],ele );
 	push( parent,ele );
 } 
@@ -30,7 +33,7 @@ class xml{
  	
 		var strfrom = 1;  
 		var tagfrom,tagto //find pos
-				,slash_front ,tag,properties, slash_back = ..string.find(xmlstr, "\<([\/\?]?)([\w:]+)(.*?)([\/\?]?)\>", strfrom);
+				,slash_front ,tag ,properties, slash_back = find(xmlstr, "\<([\/\?]?)(<[\w_:]+>|<:+>)(.*?)([\/\?]?)\>", strfrom);
 				
 		while(tagfrom) { 
 		
@@ -45,7 +48,7 @@ class xml{
 				//empty ele e.g. <tag />
 				var tab = {  tag=tag; empty_ele=1}
 				parseProperties( tab,properties);
-				pushElemet(topNode,tab)
+				pushEle(topNode,tab)
 			}
 			elseif slash_front  != "/"  {  
 			 	// open tag e.g. <tag prop="value" >
@@ -64,12 +67,23 @@ class xml{
 				if ele.tag != tag {
 					error("trying to close <" + ele.tag + "> with </" + tag + ">")
 				}
-				pushElemet(topNode, ele)
+				pushEle(topNode, ele)
 			}
 			
-			strfrom = tagto+1
-			tagfrom,tagto
-				,slash_front ,tag,properties, slash_back = ..string.find(xmlstr, "\<([\/\?]?)([\w:]+)(.*?)([\/\?]?)\>" , strfrom);
+			strfrom = tagto+1 
+			tagfrom,tagto,slash_front ,tag,properties, slash_back = find(xmlstr, "\<([\/\?]?)(<[!\w_:]+>|<:+>)(.*?)([\/\?]?)\>" , strfrom);
+				 
+			if( tagfrom && xmlstr[tagfrom+1]=='!'#  ) { 
+				//e.g <![CDATA[ ..... ]]>
+				if( sub(xmlstr,tagfrom,tagfrom+8 ) == "<![CDATA[" ){ 
+					var cdata = match(xmlstr,"(.+?)<@]]>@>", tagfrom+9)
+					if(cdata){ 
+						topNode.cdata = cdata;
+						strfrom = tagfrom + 12 + #cdata
+						tagfrom,tagto,slash_front ,tag,properties, slash_back =  find(xmlstr, "\<([\/\?]?)(<[!\w_:]+>|<:+>)(.*?)([\/\?]?)\>" , strfrom);
+					}
+				} 
+			}
 		}
 		
 		var innerText = sub(xmlstr, strfrom)
@@ -84,4 +98,11 @@ class xml{
 	}; 
 }
 
+ 
+
+/**intellisense()
+string.xml = xml解析
+string.xml(__/*xml字符串*/) = 创建xml对象.
+?string.xml = !xml.
+end intellisense**/
  

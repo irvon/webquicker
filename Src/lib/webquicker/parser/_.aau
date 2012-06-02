@@ -70,7 +70,7 @@ parseRequest = function (str) {
 // 生成回复
 response = class {
 
-	ctor (socket) {
+	ctor (socket, g) {
 		var hSocket = socket;
 		
 		this.status = "200 OK";
@@ -88,6 +88,8 @@ response = class {
 		this.cookie = {};
 		
 		this.closed = false;
+		
+		var g = g;
 	}
 	
 	write = function (str) {
@@ -118,7 +120,12 @@ response = class {
 	}
 	
 	redirect = function (url) {
-		this.status = "302 Found";
+		this.status = "302 Moved Temporarily";
+		this.header["Location"] = url;
+	}
+	
+	redirect_301 = function (url) {
+		this.status = "301 Moved Permanently";
 		this.header["Location"] = url;
 	}
 	
@@ -174,15 +181,19 @@ response = class {
 	}
 	
 	close = function () {
+		// 释放全局变量
+		g["_RELEASE "]();
+		
 		this.flush();
 		this.closed = true;
-	}
-	
-	// 元表
-	@ {
-		_set = function (name, value) {
-			..io.print(name, value);
-		}
+		
+		// 善后工作
+		..wsock.closesocket(hSocket);
+		collectgarbage("collect");
+		..thread.set("threadCount", ..thread.get("threadCount") - 1); // 递减线程数
+		
+		// 终止线程
+		..thread.stop(1);
 	}
 	
 }

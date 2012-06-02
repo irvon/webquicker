@@ -1,6 +1,4 @@
-/*
-AAuto获取硬盘物列序列号
-*/
+//hd 硬盘物理序列号
 
 namespace sys.hd  {
     

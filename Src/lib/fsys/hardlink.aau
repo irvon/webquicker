@@ -1,3 +1,4 @@
+//hardlink Ó²Á´½Ó
 namespace fsys.hardlink;
 
 CreateHardLink = ::Kernel32.api( "CreateHardLink", "int(str path,str exist,pointer sa)");	

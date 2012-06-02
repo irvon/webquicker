@@ -1,0 +1,43 @@
+if (!_BASEPATH) exit("No direct script access allowed");
+
+include(_BASEPATH + "/data/config.aau");
+include(_BASEPATH + "/core/ab-error.aau");
+include(_BASEPATH + "/core/ab-template.aau");
+include(_BASEPATH + "/core/ab-db.aau");
+
+// 自动连接数据库，减少连接数据库的次数
+db = abdb();
+db.connect();
+// 脚本结束后自动释放数据库，无需手动关闭
+
+include(_BASEPATH + "/core/ab-system.aau");
+// 系统信息
+system = absystem();
+
+// 模板
+tpl = abtemplate( dirname(owner) + "/../templates/" + string.fromto(system.blog_template) );
+tpl.set_file("header", "header.tpl");
+tpl.extra = {};
+tpl.extra.css = {};
+tpl.extra.js = {};
+tpl.pp = function (name) {
+	if (name == "header") {
+		// 处理额外的 css 和 js
+		tpl.set_block("header", "css", "bcss");
+		for (i = 1; #tpl.extra.css) {
+			tpl.set_var("src", tpl.extra.css[i]);
+			tpl.parse("bcss", "css", true);
+		}
+		tpl.set_block("header", "js", "bjs");
+		for (i = 1; #tpl.extra.js) {
+			tpl.set_var("src", tpl.extra.js[i]);
+			tpl.parse("bjs", "js", true);
+		}
+	}
+	tpl.parse("p" + name, name);
+	tpl.p("p" + name);
+}
+
+var baseurl = system.blog_baseurl;
+baseurl = string.trimright(baseurl, "/");
+tpl.set_var("baseurl", baseurl);

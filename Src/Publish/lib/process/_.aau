@@ -7,12 +7,11 @@ process = class{
 			var access = type(parameters)==type.number?parameters: 0x1FFFFF/*_PROCESS_ALL_ACCESS*/ 
    			this.handle = OpenProcess( access,false ,pid);
    			this.id = pid;
+   			if(!this.handle)
+   				return null;
    		}
    		elseif( pid || #parameters ){
-   			sa = STARTUPINFO();   
-			for(k,v in startInfo  ){
-				sa[k] = v; 
-			}  
+   			var sa = ..table.mixin(STARTUPINFO(),startInfo);
 			if( sa.suspended )
 			 	sa.creationFlag |= 0x4/*_CREATE_SUSPENDED*/
 			
@@ -65,10 +64,13 @@ process = class{
    			this.handle = getHandle();
    		}
    		
+   		this._memory = {};
    		//´´½¨Îö¹¹¶ÔÏó  
    		this._gc = ..gcdata(
    			_gc = function(){
-   				this.free();
+   				if(this.handle){
+   					this.free();
+   				}
    			} 
    		)
    	
@@ -77,13 +79,16 @@ process = class{
 	//Ç¿ÐÐÖÕÖ¹½ø³Ì
 	terminate = function(){
 		if(this.handle){
-		TerminateProcess( this.handle , 0) 
-		this.free();
+			TerminateProcess( this.handle , 0) 
+			this.free();
 		}
 	}
 	
 	//ÊÍ·Å½ø³Ì
 	free = function(){ 
+		for(p,v in this._memory){ 
+			this.mfree(p); 
+		} 
 		if(this.handle)
 			..raw.closehandle(this.handle);
 		if(this.thandle)
@@ -189,12 +194,15 @@ process = class{
     
     //memery allocate
 	malloc = function(size,protect=0x40,alloctype=0x1000){
-		return VirtualAllocEx(this.handle,0,size,alloctype,protect)
+		var ptr = VirtualAllocEx(this.handle,0,size,alloctype,protect)
+		this._memory[ptr] = 1;
+		return ptr;
 	}
 	 
 	//memery free
-	mfree = function(address,size=0,freetype=0x8000){
-		VirtualFreeEx(  this.handle,address,size,freetype)
+	mfree = function(ptr,size=0,freetype=0x8000){
+		this._memory[ptr] = null;
+		VirtualFreeEx( this.handle,ptr,size,freetype) 
 	}
 	
 	eachModule = function(){
@@ -213,9 +221,18 @@ process = class{
 	setPriorityClass = function(p){
 		return SetPriorityClass( this.handle,p );
 	}
-	
+	_asm = function(bin,proto,k){ 
+		var pfun = this.malloc(#bin);
+		this.writeString(pfun,bin )   
+		return this.remoteApi(proto,pfun,k )
+	}
+	asmStdcall = function( proto,... ){ 
+		return this._asm( ..string.join({...}),proto,"stdcall") 
+	}
+	asmCdecl = function( proto,... ){ 
+		return this._asm( ..string.join({...}),proto,"cdecl")  
+	}  
 }
-
  
 namespace process{
 
@@ -443,7 +460,10 @@ namespace process{
 	eachSnap = function(pid,snapCs,firstEntry,entryFirst,entryNext) { 
     	firstEntry.dwSize = ..raw.sizeof(firstEntry);
     	var hsnap= CreateToolhelp32Snapshot (snapCs,pid )   
-    	assert(hsnap!=_INVALID_HANDLE_VALUE,"´´½¨¿ìÕÕÊ§°Ü CreateToolhelp32Snapshot failed ")  
+    	if( hsnap==_INVALID_HANDLE_VALUE ){
+    		//"´´½¨¿ìÕÕÊ§°Ü CreateToolhelp32Snapshot failed " 
+    		return function(){ } 
+    	} 
     	
    		var freeItor = function(){  
    			if(hsnap){ //±ÜÃâÖØ¸´Îö¹¹ 
@@ -581,7 +601,7 @@ namespace process{
 			path = entry.szExePath;
 			break;
 		}
-		return ..string.str(path);
+		return path ? ..string.str(path);
 	}
 	
 
@@ -691,15 +711,18 @@ process(.(Ö´ÐÐÎÄ¼þ, ÃüÁîÐÐ²ÎÊý,Æô¶¯²ÎÊý) = ÔËÐÐÖ´ÐÐÎÄ¼þ»ò¹ØÁªÎÄµµ¡£\nÒ²¿ÉÒÔ½öÖ¸¶
 !process.writeNumber(__/*ÄÚ´æµØÖ·*/,0,"BYTE") = Ð´ÈëÒ»¸ö×Ö½Ú,8Î»ÎÞ·ûºÅ
 !process.getPriorityClass() = ·µ»Ø½ø³ÌÓÅÏÈ¼¶
 !process.setPriorityClass(0x80/*_HIGH_PRIORITY_CLASS*/) = ÉèÖÃ½ø³ÌÓÅÏÈ¼¶
+!process.asm
 !process.handle = ½ø³Ì¾ä±ú
 !process.id = ½ø³ÌID
-!process.tid = ½ø³ÌµÄÖ÷Ïß³ÌID\nÊ¹ÓÃprocessÀà´´½¨µÄ½ø³Ì²Å»áÓÐÐ©ÊôÐÔ
-!process.thandle = ½ø³ÌµÄÖ÷Ïß³Ì¾ä±ú\nÊ¹ÓÃprocessÀà´´½¨µÄ½ø³Ì²Å»áÓÐÐ©ÊôÐÔ
+!process.tid = ½ø³ÌµÄÖ÷Ïß³ÌID\nÊ¹ÓÃprocessÀà´´½¨µÄ½ø³Ì²Å»áÓÐ´ËÊôÐÔ
+!process.thandle = ½ø³ÌµÄÖ÷Ïß³Ì¾ä±ú\nÊ¹ÓÃprocessÀà´´½¨µÄ½ø³Ì²Å»áÓÐ´ËÊôÐÔ
 !process.remoteApi("void()","User32","MessageBoxA" ) = ÓÃ·¨Í¬ raw.remoteApi,µ«ÎÞÐèÖ¸¶¨½ø³ÌID
 !process.terminate() = Ç¿ÐÐÖÕÖ¹½ø³Ì
 !process.eachModule = @for moduleEntry in ??.eachModule() { \n__//io.print( moduleEntry.szExePath  )\n \n}
 !process.eachThread = @for threadEntry in ??.eachThread() { \n__//io.print( threadEntry.th32ThreadID  )\n \n}
 !process.getPath() = ·µ»ØÖ´ÐÐ³ÌÐòÎÄ¼þÍêÕûÂ·¾¶
+!process.asmCdecl(.(º¯ÊýÔ­ÐÍ,ÈÎÒâ¶à¸ö»úÆ÷Âë²ÎÊý) = Ð´Èë»úÆ÷Âë·µ»Øº¯Êý¶ÔÏó\nÇë²Î¿¼:¿ìÊÖ¹¤¾ß->ÆäËû±àÒëÆ÷->INTEL»ã±àÓïÑÔ->»ã±à×ª»úÆ÷Âë
+!process.asmStdcall(.(º¯ÊýÔ­ÐÍ,ÈÎÒâ¶à¸ö»úÆ÷Âë²ÎÊý) = Ð´Èë»úÆ÷Âë·µ»Øº¯Êý¶ÔÏó\nÇë²Î¿¼:¿ìÊÖ¹¤¾ß->ÆäËû±àÒëÆ÷->INTEL»ã±àÓïÑÔ->»ã±à×ª»úÆ÷Âë
 ?process = !process.
 ?process.openWindow = !process.
 ?process.each = !processEntry.

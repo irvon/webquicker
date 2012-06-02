@@ -1,0 +1,264 @@
+assert(web.layout);
+var dll = ..web.layout.dll; 
+namespace web.layout;
+ 
+class value{
+	ctor (v,...) {
+		this = __value();
+		this@ = _metaProperty;
+		if( v ){
+			this.setValue(v,...);
+		}
+		..table.add_gc(this,"clear");
+	};
+}
+
+namespace value {
+
+	class __value{
+		INT type;
+		INT units;
+		LONG data;
+	}
+	var value_t =  ..web.layout.value;
+	
+	//ValueInit = dll.api("ValueInit", "INT(struct pval)");
+	ValueClear = dll.api("ValueClear", "INT(struct &pval)");
+	ValueCompare = dll.api("ValueCompare", "bool(struct pval,struct pval2)");
+	ValueCopy = dll.api("ValueCopy", "INT(struct& pdst,struct psrc)"); 
+
+	ValueType = dll.api("ValueType", "INT(struct pval, INT& pType, INT& pUnits)");
+	ValueStringDataSet = dll.api("ValueStringDataSet", "INT(struct &pval, pointer chars, INT numChars, INT units)");
+	ValueStringData = dll.api("ValueStringData", "INT(struct pval, pointer& pChars, INT& pNumChars)"); 
+	ValueIntData= dll.api("ValueIntData","INT( struct pVal, int& pData )");
+	ValueIntDataSet = dll.api("ValueIntDataSet","INT( struct& pVal, int data, INT type, INT units )");
+	ValueInt64Data = dll.api("ValueInt64Data","INT( struct pVal, long& pData )");
+	ValueInt64DataSet = dll.api("ValueInt64DataSet","INT( struct &pVal, long data, INT type, INT units )");
+	ValueFloatData = dll.api("ValueFloatData","INT( struct pVal, double& pData )");
+	ValueFloatDataSet = dll.api("ValueFloatDataSet","INT( struct &pVal, double data, INT type, INT units )");
+	ValueBinaryData = dll.api("ValueBinaryData","INT( struct pVal, string& pBytes, INT& pnBytes )");
+	ValueBinaryDataSet = dll.api("ValueBinaryDataSet","INT( struct &pVal, string pBytes, INT nBytes, INT type, INT units )");
+	ValueToString = dll.api("ValueToString","INT( struct &pVal, INT how )");
+	ValueFromString = dll.api("ValueFromString","INT( struct &pVal,string str,INT length,INT how)"); 
+ 	ValueElementsCount = dll.api("ValueElementsCount", "INT(struct pval,int &pn)"); 
+ 	ValueSetValueToKey = dll.api("ValueSetValueToKey", "INT(struct pval,struct pkey struct, pval_to_set)"); 
+ 	ValueGetValueOfKey = dll.api("ValueSetValueToKey", "INT(struct pval,struct pkey, struct& pretval)"); 
+ 	ValueNthElementValueSet = dll.api("ValueNthElementValueSet", "INT(struct pval,int n, pval_to_set)"); 
+ 	ValueNthElementValue = dll.api("ValueNthElementValue", "INT(struct pval,int n, struct& pretval)"); 
+ 	  
+ 	FileTimeToSystemTime = ::Kernel32.api("FileTimeToSystemTime","int(long &filetime,struct& time)")
+	SystemTimeToFileTime = ::Kernel32.api("SystemTimeToFileTime","int(struct time,long& filetime)")
+ 
+ 	var fromUnicode = ..string.fromUnicode;
+  	var toUnicode = ..string.toUnicode;
+  	
+	_metaProperty = ..util.metaProperty(
+		_tonumber = function(){
+			return tonumber( owner.value );
+		}
+		_tostring = function(){
+			var val = owner.clone(); 
+			val.stringify();
+			var str = val.getString();
+			val.clear();
+			return str;
+		}
+		_eq = function(val){
+			return ValueCompare(owner,val);
+		} 
+		clone = function(){
+			var val = value_t();
+			ValueCopy(val,owner);
+			return val;
+		} 
+		clear = function(){
+			if(owner.data) 
+				ValueClear(owner);
+		};
+		getString = function(){ 
+			var re,p, n = ValueStringData(owner, null, 0);
+			if(re==0/*_HL_HV_OK*/){
+				return (( p && n) ? fromUnicode(p, 0,true) : "") ;
+			}
+		}
+		setString = function( v ){
+			v = toUnicode(v);
+			return ValueStringDataSet(owner, v, #v / 2 - 1, 0xFFFF)==0/*_HL_HV_OK*/  ;  
+		};
+		getTime = function(){ 
+			if( owner.type = 6/*_HL_T_DATE*/ ){
+				var re,v = ValueInt64Data(owner, 0);
+				if(re==0/*_HL_HV_OK*/){
+					var tm = ..time();
+					FileTimeToSystemTime(v,tm);
+					return tm;
+				}
+			}
+		}
+		setTime = function( v ){
+			var ret,v = SystemTimeToFileTime(v,0);
+			ValueInt64DataSet(owner, v, 6/*_HL_T_DATE*/, 0); 
+		};
+		getNumber = function(){ 
+			var re,v = ValueFloatData(owner, 0); 
+			if(re==0/*_HL_HV_OK*/)return v;
+		}
+		setNumber = function( v,units = 0 ){
+			ValueFloatDataSet(owner, v, 4/*_HL_T_FLOAT*/, units); 
+		};
+		getInt32 = function(){ 
+			var re,v = ValueIntData(owner, 0); 
+			if(re==0/*_HL_HV_OK*/)return v;
+		}
+		setInt32 = function( v,units = 0 ){
+			ValueIntDataSet(owner, v, 4/*_HL_T_FLOAT*/, units); 
+		};
+		getLong64 = function(){ 
+			var re,v = ValueInt64Data(owner, 0); 
+			if(re==0/*_HL_HV_OK*/)return v;
+		}
+		setLong64= function( v,units = 0 ){
+			ValueInt64DataSet(owner, v, 4/*_HL_T_FLOAT*/, units); 
+		};
+		getValue = function(){
+			var re,ht,units= ValueType( owner,0,0 ); 
+      		unitName = VALUE_UNIT_TYPE[units]; 
+      		
+      		if( ht = 5/*_HL_T_STRING*/ ){
+				return owner.getString();
+			}
+			elseif( ht = 4/*_HL_T_FLOAT*/ || ht == 8/*_HL_T_LENGTH*/){
+				return owner.getNumber();
+			} 
+			elseif( ht = 3/*_HL_T_INT*/ ){
+				return owner.getInt32();
+			}
+			elseif( ht = 7/*_HL_T_CURRENCY*/ ){
+				return owner.getLong64();
+			}
+			elseif( ht = 6/*_HL_T_DATE*/ ){
+				return owner.time;
+			} 
+		}
+		setValue = function(v,units=0,dataType=4/*_HL_T_FLOAT*/){  
+      		var ta = type(v); 
+      		if( ta == type.string ){
+      			owner.setString(v);
+      		}
+      		elseif( ta ==  type.table ){
+      			if( ..time.istime(v) ){
+      				owner.time = v;
+      			}
+      			elseif( ( v@ == _metaProperty ) && ( v._struct == owner._struct ) ){
+      				ValueCopy(owner,v);
+      			}
+      		}
+      		elseif( ta == type.number ){
+      			if( type(units) == type.string ){
+      				units = VALUE_UNIT_TYPE[units];
+      			}; 
+      			if( ! ( units && dataType) ){
+      				var re,oldType,oldUnits= ValueType( owner,0,0 ); 
+      				if(!units) units = oldUnits : 0;
+      				if(!dataType) dataType = oldType : 4/*_HL_T_FLOAT*/;
+      			}
+      			 
+      			if( dataType == 4/*_HL_T_FLOAT*/){  
+      				owner.setNumber(v,units)
+      			}
+      			elseif( dataType == 3/*_HL_T_INT*/ ){
+      				owner.setInt32(v,units)
+      			}
+      			else{
+      				owner.setLong64(v,units)
+      			} 
+      		}
+      		else {
+      			error("错误的参数类型",2)
+      		};
+      	};
+      	value = {
+      		_get = function(){
+      			return owner.getValue()
+      		}
+      		_set = function(v){
+      			owner.setValue(v)
+      		} 
+      	}; 
+		stringify = function(){
+			ValueToString(owner,0/*_HL_CVT_SIMPLE*/);
+			return owner.getString();
+		}
+		parse = function(str){
+			str = toUnicode(str);
+			ValueFromString(owner,str,#str-2,0/*_HL_CVT_SIMPLE*/); 
+		};
+		jsonParse = function(str){
+			str = toUnicode(str);
+			ValueFromString(owner,str,#str-2,1/*_HL_CVT_JSON_LITERAL*/);
+		}
+		jsonStringify = function(){
+			ValueToString(owner,1/*_HL_CVT_JSON_LITERAL*/);
+			return owner.getString();
+		};
+		length = {
+			_get = function(){
+				var ret,len = ValueElementsCount(owner,0);
+				if( ret==0/*_HL_HV_OK*/)return len;
+			} 
+		}
+		getItem = function(key,...){
+			var retVal = value_t();
+			if(type(key)==type.number){
+				if( ValueNthElementValue(owner,key,retVal) == 0/*_HL_HV_OK*/ )
+					return retVal;
+			}
+			else {
+				if( ValueGetValueOfKey(owner,value_t(key),retVal) == 0/*_HL_HV_OK*/ )
+					return retVal;
+			} 
+		};
+		setItem = function(key,...){
+			var val = value_t(...);
+			if(type(key)==type.number){
+				return ( ValueNthElementValueSet(owner,key,val) == 0/*_HL_HV_OK*/ ) 
+			}
+			else {
+				return ( ValueSetValueToKey(owner,value_t(key),val) == 0/*_HL_HV_OK*/ ) 
+			} 
+		}; 
+	)
+	
+	VALUE_UNIT_TYPE = { 
+  		"em";"ex";"pr";"sp";"";"";"px";"in";"cm";"mm";"pt";"pc";"dip";"";"color";"url";"symbol";
+  		 ["in"]=8;pr=3;["%"]=3;sp=4;["%%"]=4;reserved3=14;em=1;cm=9;px=7;color=15;ex=2;symbol=65535;url=16;dip=13;pc=12;pt=11;mm=10
+  	};
+}
+
+ /**intellisense()
+web.layout.value(.(初始值,单位,类型) = 创建并返回动态值类型,\n所有参数可选
+web.layout.value() = !web_layout_value.
+!web_layout_value.clone() = 复制值\n!web_layout_value.
+!web_layout_value.clear() = 清空值 
+!web_layout_value.getString() = 返回字符串值\n如果值类型字符串值,取值返回空\n使用 tostring() 函数可强制返回数值
+!web_layout_value.setString(__/*字符串值*/) = 写入字符串值
+!web_layout_value.getTime() = 返回时间值\n如果值类型不是时间值,取值返回空
+!web_layout_value.setTime(__/*时间值*/) = 写入时间值
+!web_layout_value.getNumber() = 返回浮点数值\n如果值类型不是浮点数,取值返回空\n使用 tonumber() 函数可强制返回数值
+!web_layout_value.setNumber(__/*数值*/) = 写入浮点数值
+!web_layout_value.getInt32() = 返回整型数值\n如果值类型不是整型值,取值返回空
+!web_layout_value.setInt32(__/*数值*/) = 写入整型数值
+!web_layout_value.getLong64() = 返回长整型数值\n如果值类型不是长整型数值,取值返回空
+!web_layout_value.setLong64(__/*数值*/) = 写入长整型数值 
+!web_layout_value.getValue() = 返回字符串值、数值、时间值
+!web_layout_value.setValue(.(值,单位,类型) = 写入字符串值、数值、时间值\n参数2,参数3为可选参数
+!web_layout_value.value = 读取或写入字符串值、数值、时间值
+!web_layout_value.stringify() = 转换并返回字符串
+!web_layout_value.parse() = 解析字符串
+!web_layout_value.jsonStringify() = 转换并返回JSON字符串
+!web_layout_value.jsonParse() = 解析JSON字符串
+
+_HL_CVT_SIMPLE=@0/*_HL_CVT_SIMPLE*/
+_HL_CVT_JSON_LITERAL=@1/*_HL_CVT_JSON_LITERAL*/
+_HL_CVT_JSON_MAP=@2/*_HL_CVT_JSON_MAP*/
+end intellisense**/

@@ -1,8 +1,8 @@
-
+//..默认库 挂接外部浏览器
 import web.form.util;
 namespace web; 
  
-var IID_IHTMLDocument = win.guid.fromString("{626FC520-A41E-11CF-A731-00A0C9082637}")
+var IID_IHTMLDocument = ..win.guid.fromString("{626FC520-A41E-11CF-A731-00A0C9082637}")
 class access{
 
 	ctor( hwnd )begin
@@ -11,8 +11,8 @@ class access{
 		
 		var err; 
 		try{ 
-			var doc = getAccessibleObject(hwnd,IID_IHTMLDocument) 
-	 		this._object = ..web.form.util.queryBrowser(doc.parentWindow)
+			this._document = getAccessibleObject(hwnd,IID_IHTMLDocument) 
+	 		this._object = ..web.form.util.queryBrowser(this._document.parentWindow)
 	 		this._browser = this._object; 
 		}
 		catch(e){ 
@@ -20,13 +20,23 @@ class access{
 		}
 		if(!this._browser)
 			return null, err;
-			
+		
+		var sink, cookie 	
 		try{
-			var sink, cookie =..com.Connect(this._browser, this );
+			sink, cookie =..com.Connect(this._browser, this );
 		}
+		
+		..table.add_gc(this,function(){
+			if(cookie){
+				..com.ReleaseConnection(this._browser);  
+			};
+			..com.Release(this._browser) 
+			..com.Release(this._document )
+		});
+		
 	end; 
 	 
-	@metaProperty;
+	@_metaProperty;
 }
  
 namespace access { 
@@ -35,13 +45,15 @@ namespace access {
 	ObjectFromLresult := dll.api("ObjectFromLresult","int(int lResult,struct riid,int wParam,pointer &ppvObject)" ); 
 	WM_HTML_GETOBJECT = ::RegisterWindowMessage("WM_HTML_GETOBJECT"); 
 	getAccessibleObject = function (hwnd,iid){ 
-		var re, res = ::SendMessageTimeout (hwnd, WM_HTML_GETOBJECT, 0,0, 0x2/*_SMTO_ABORTIFHUNG*/,1000,0)  
+		var re, res = ::SendMessageTimeout (hwnd, WM_HTML_GETOBJECT, , , 0x2/*_SMTO_ABORTIFHUNG*/,1000,0)  
 		var re,unknown = ObjectFromLresult(res, iid , 0 );
 		//将一个 C指针转换为com对象
-		return ..com.QueryObject( unknown )
+		var doc = ..com.QueryObject( unknown );
+		..com.Release(unknown);
+		return doc;
 	}
 
-	metaProperty =  ..web.form.metaProperty  
+	_metaProperty =  ..web.form._metaProperty  
 }
  
 //自动提示

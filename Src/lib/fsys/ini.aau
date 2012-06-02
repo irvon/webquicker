@@ -1,4 +1,4 @@
-//ini文件操作
+//ini 配置文件
 namespace fsys; 
 
 //转换文件路径,并保证ini一定存在
@@ -21,7 +21,7 @@ class ini{
         ctor(path){  
 			path = getIniPath(path);
         };         
-        read = function(app=null,key=null,default = ""){
+        read = function(app,key ,default = ""){
 				var getlen=512
                 var len,val = GetPrivateProfileString(app,key,default,getlen,getlen,path)
                 while(len >= getlen-2){
@@ -111,20 +111,23 @@ class ini.section{
         
         this@  = { 
 			save = function(){
-			var t = {}
-			for(k,v in this){
-				if(type(v)!=type.function){
-					..table.push(t,k);
-					..table.push(t,"=");
-					..table.push(t,v); 
-					..table.push(t,'\0');
+				var t = {}
+				for(k,v in this){
+					if(type(v)!=type.function){
+						..table.push(t,k);
+						..table.push(t,"=");
+						..table.push(t,v); 
+						..table.push(t,'\0');
+					}
 				}
+				..table.push(t,'\0'); 
+				..table.push(t,'\0'); 
+				var v = ..string.join(t ); 
+				WritePrivateProfileSection( app,v,path); 
 			}
-			..table.push(t,'\0'); 
-			..table.push(t,'\0'); 
-			var v = ..string.join(t ); 
-			WritePrivateProfileSection( app,v,path); 
-			}
+			name = function(){
+				return app;
+			} 
 		} 
 		//将save函数放在元表中,这样当使用for in遍历ini.section对象时,就看不到save函数 
         this@._get = this@ 
@@ -150,9 +153,13 @@ fsys.ini("__") = 打开ini文件
 !ini.readKeys("小节名称") = 返回指定小节中所有项名的一个列表 
 !ini.getSectionNames() = 获取所有小节名字,返回数组.
 !ini.getSection("__/*小节名称*/") = 读取或添加ini.section对象,可直接读写成员.
+!inisection.name() = 返回小节名称
 !inisection.save() = 保存更改到ini文件
+!inisection.属性名 = 可读写小节属性
 ?ini.getSection = !inisection.
-!ini.eachSection() = @for section in __/*输入ini对象名字*/.eachSection() { 
+!ini.getSection() = !inisection.
+?.eachSection  = !inisection.
+!ini.eachSection() = @for section in ??.eachSection() { 
 	for(k,v in section){
 		io.print(k,v)	 
 	} 

@@ -1,0 +1,43 @@
+//res 资源文件
+import fsys;
+namespace fsys.res;
+ 
+EnumResourceNames = ::Kernel32.api( "EnumResourceNames", "bool(pointer hModule,str type,pointer func,pointer lParam)");
+enum = function( proc,resType = "RES",module=_HINSTANSE){
+	var proc_c = ..raw.tostdcall(proc,"(pointer hModule,str stype,str name,pointer lParam)")
+	resType = makeIntResource(resType) : resType;
+	EnumResourceNames(module,resType,proc_c )
+}
+ 
+makeIntResource = function(nRes){ 
+	if( type(nRes) == type.number ){
+		return  ..raw.convert( {word w = nRes },{pointer s} ).s;
+	} 
+} 
+
+saveRes = function(srcDir="/",target="/"){
+	if( _STUDIO_INVOKED ){ 
+		return ..fsys.copy(srcDir,..fsys.createDir(target));
+	}
+	
+	srcDir = ..string.upper( ..string.replace(srcDir,"\\","/") );
+	if( srcDir[1] != '/'#)
+		error("源路径必须以斜杠开始",2)
+	enum(
+		function(module,resType,resName){
+			if( ..string.startWith(resName,srcDir) ){
+				var str = ..string.load( resName )
+				var path = ..fsys.joinpath(target,resName)
+				..fsys.createDir( ..fsys.getParentDir(path)  )
+				..string.save( path,str ) 
+			}
+			return true;
+		},"RES"
+	)
+}
+
+/**intellisense(fsys.res)
+enum  = @.enum(\n	function(module,resType,resName){ \n		return true;\n	}\n)
+saveRes(.(源目录,目标目录) = 保存内嵌资源目录为硬盘文件\n源目录可指定源目录路径\n所有参数可省略
+makeIntResource(__) = 将数值类型资源名,或资源类型名转换为指针.
+end intellisense**/

@@ -1,0 +1,62 @@
+//table 配置表
+import util.metaProperty
+namespace fsys;
+
+class table{ 
+	ctor(file){ 
+		this@ = ( 
+			util.metaProperty( 
+				load = function(){
+					for(k,v in this){ 
+						this[k] = null;
+					}
+					var s = ..string.load(file);
+					if(#s){
+						var t = eval( s );
+						if(!t)
+							return;
+						..table.mixin(this,t )	
+						return this;
+					} 
+				};
+				save  = function(){
+					if( type( this._beforeSave ) == "function"  ){
+						this._beforeSave();
+					}
+					
+					var str = ..table.tostring(this)
+					..string.save(file, str);
+					
+					return this;
+				};
+				mixin = function(...){
+					..table.mixin(this,...);
+					this.save();
+					return this;
+				}  
+				_tostring = function(){
+					return ..table.tostring(this)
+				} 	
+			) 
+		);
+		
+		if( ..io.exist(file) ) {
+			this.load();
+		};
+	}; 
+} 
+
+namespace table{
+	import util.metaProperty 
+}
+ 
+/**intellisense()
+fsys.table = 支持将table对象存储到文件或从文件读出\n与fsys.config不同,该对象不会自动创建硬盘文件
+fsys.table("__/*文件名*/") = 创建可持久化table对象\n创建的对象可作为普通table对象使用
+fsys.table() = !fsys_table.
+?fsys.table = !fsys_table.
+!fsys_table.load() = 从文件载入\n加载成功返回对象,加载失败返回null空值\n!fsys_table.
+!fsys_table.save() = 存储到文件
+!fsys_table._beforeSave = 指定一个函数,在保存配置以前自动调用\n只读事件,指定以后不可修改
+!fsys_table.mixin = @.mixin(\n   键名 = 值__;\n   键名 = 值;\n);//该数会自动调用save函数保存配置到文件
+end intellisense**/

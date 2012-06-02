@@ -1,69 +1,10 @@
-//string扩展库
-
-
-/************************************
-Author		: carl
-Time		: March 31, 2010
-Version		: 
-Description : 
-************************************/
+//ex 扩展库 
+//Author carl
 
 namespace string.ex 
-import string;
-import table;
-
-var push =  table.push;
-var format =  string.format;
-var pack =  string.pack;
-var gmatch = string.gmatch;
+import string; 
  
-
-//半角转全角
-toWide = function(str){
-	var tab = {}
-	var chr;
-	for(i=1;#str;1){
-		chr = str[i]
-		if( chr >= 0x80 ){
-			push(tab,str[i])
-			i++;
-			push(tab,str[i]);
-		}
-		else if( chr>=32 ){
-			push(tab,0xA3);
-			push(tab,chr+0x80);
-		}
-		else{
-			push(tab,chr);
-		}
-	
-	}
-	return pack(  table.unpack(tab) );
-}
-
-//全角转半角
-fromWide = function(str){
-	var tab = {}
-	var chr;
-	for(i=1;#str;1){
-		chr = str[i]
-		if( chr ==0xA3 && (str[i+1]>0x80) ){ 
-			i++;
-			push(tab,str[i]-0x80);
-		} 
-		else{
-			push(tab,chr);
-			if(chr>0x80){ 
-				i++;
-				push(tab,str[i] );
-			}  
-		}
-	
-	}
-	return pack( table.unpack(tab) );
-}
- 
-replaceEx = function(str,p,r="",start=2,n){
+replaceEx = function(str,p,r="",start=0,n){
     var m = 0;
     var c = 0;
 	return ..string.replace(str,p,function(c){
@@ -73,59 +14,14 @@ replaceEx = function(str,p,r="",start=2,n){
 			if(n && c>n)
 				return c;
 				
-			return r; //如果count不是0
+			return r; 
 		}
 		return c;
 	} ) 
-} 
-
-dump = function(str){
-	var t = {"'"}
-	var chr;
-	for(i=1;#str ){
-		c = str[i] & 0xFF ;
-		if( c == '\\'#)
-			push( t,"\\" );
-		else if  (c >'9'# &&  c < '~'# )
-			push( t,pack(c) );
-		else if( c==' '# or c=='%'#)
-			push( t,pack(c) );
-		else if( c < 100 ){ 
-			push( t,format("\%d", c ) ) 
-		}
-		else
-    		push( t,format("\x%02x", c ) )
-	}
-	push( t, "'")
-	return ..string.join(t);
-}
-
-//合并重复项
-distinct =  function(str,sep='\n',tdist) {
-    var tnew = {}//创建一个新的数组，这样不用去不断改变原来的数组，效率更好
-    tdist :=  {};
-    
-    //将字符串拆分为数组
-    var tarr = ..string.split( str,sep);  
-    for (i,line in tarr) {
-        if(not tdist[line] ) { 
-            tdist[line]=1; 
-            push( tnew,line ); 
-        }
-        else{
-            tdist[line]++;
-        }
-        
-    };
-    return ..string.join(tnew,sep);
 };
 
 /**intellisense(string.ex) 
-distinct(.(字符串,分隔符,统计表) = 合并重复项,第二个参数指定拆分字符(默认是换行符)\n可以在第三个参数中指定用于统计重复次数的table对象
-dump(__) = 将二进制字符串转换为十六进文本表示的AAuto代码
-replaceEx(.(字符串,替换模式,替换串,忽略次数,替换次数) = 除第一，第二个参数以外，所以参数可选\n忽略前n个匹配(默认为2)不替换
-fromWide(__/*全角字符串*/) = 全角转半角
-toWide(__/*半角字符串*/) = 半角转全角 
+replaceEx(.(字符串,替换模式,替换串,忽略次数,替换次数) = 除第一，第二个参数以外，所以参数可选
 end intellisense**/
 
 

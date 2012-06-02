@@ -1,10 +1,13 @@
-//公用对话框
+//dlg 公用对话框
 //windows公用对话框支持，例如打开文件对话框
-import win;
+import win; 
+import fsys;
 namespace fsys.dlg   
 var dll = ..raw.loadDll("comdlg32.dll"); 
  
 OPENFILENAME = class{
+   ctor( bufSize = 260 ){ 
+   }
    INT structSize = 0;
    INT hwndOwner  = 0;
    pointer instance ;
@@ -12,8 +15,8 @@ OPENFILENAME = class{
    string customFilter;
    INT maxCustFilter = 0;
    INT filterIndex = 0;
-   string file = ..raw.malloc(260);
-   INT maxFile =  260-1;
+   pointer file = ..raw.malloc(bufSize);
+   INT maxFile =  bufSize-1;
    string fileTitle;
    INT maxFileTitle = 0;
    string initialDir;
@@ -32,59 +35,71 @@ OPENFILENAME = class{
 var getOpenFileName = dll.api("GetOpenFileNameA","int(struct&)" )
 var getSaveFileName = dll.api("GetSaveFileNameA","int(struct&)" )
 
-var openFileDlg = function(api,title="打开文件",filter,dir="/", parenthwnd,flag){
-
-	//=== Struct used by the standard file dialog
-	ofn = OPENFILENAME(); 
+var openFileDlg = function(api,title="打开文件",filter,dir="/", hwnd,flag=0,bufSize){ 
+ 	if( flag & 0x200/*_OFN_ALLOWMULTISELECT*/) {
+ 		bufSize = 2600;
+ 	};
+	ofn = OPENFILENAME( bufSize ); 
 	ofn.structSize = ..raw.sizeof(ofn);  
-	ofn.initialDir =  ..io.exist(dir) 
+	ofn.initialDir =  ..io.exist(dir)  
+	//ofn.lpfnHook = null;  
 	
-	
-	//====== Try to set the hook
-	//ofn.lpfnHook = MyHook(hWnd, ID_FILE_OPEN, 0, 0);
-	ofn.lpfnHook = null; //MyHook(hWnd, ID_FILE_OPEN, 0, 0);
-	
-	if( type(filter) == type.table ) begin
-		..table.push( filter,"");//为了让后面多一个\0
-		ofn.filter = ..string.join( filter,'\0' ) 
-	end;
-	else if(type(filter) == type.string)
+	if(type(filter) == type.string)
 	    ofn.filter = ..string.replace( filter,'|','\0');
 	else{
 	    ofn.filter = '所有文件\0*.*\0\0'; 
 	}   
 	ofn.defExt = ..string.match(ofn.filter,"\z.+?\.(\w+)"); 
-	
-	//====== The filters string index (begins with 1)
-	ofn.filterIndex = 1;
-	
-	//====== Dialog caption
+	 
+	ofn.filterIndex = 1; 
 	ofn.title = title ;
 	ofn.maxFileTitle = #(ofn.title);
-	
-	//====== Dialog style (only in Win2K)
+	 
 	ofn.flags = 0x80000 /*_OFN_EXPLORER*/;
-	if(flag)ofn.flags |= flag;
-	
-	ofn.hwndOwner = parenthwnd;
-	
-	//====== Create and open the dialog (retuns 0 on failure)
-	if( api(ofn)  )
+	if(flag)ofn.flags |= flag; 
+	ofn.hwndOwner = hwnd;
+	 
+	if( api(ofn)  ){
+		ofn.file = ..raw.tostring(ofn.file);
+		ofn.file = ..string.trimright(ofn.file,'\0');
+		if( flag & 0x200/*_OFN_ALLOWMULTISELECT*/){  
+			var rawFiles = ..string.split(ofn.file,'\0');
+			if(#rawFiles>1){
+				var dir = ..table.remove(rawFiles);
+				var files = {}
+				if( dir[#dir] != '\\'# )
+					dir += "\"
+				for( i,name in rawFiles){ 
+					files[i] = dir ++ name;
+				}
+				return files,rawFiles/*第一个是目录，后面是n个文件名*/;
+				
+			}
+			return rawFiles;
+		}
     	return ofn.file ;
-	else
-	   return null//assert( false, ..lasterr() )
+    } 
 
 }
-
-/*intellisense(fsys.dlg)*/  
-open  = function(filter="所有文件|*.*||",title="打开文件",dir, parenthwnd,flag){
-	return openFileDlg(getOpenFileName,title,filter,dir, parenthwnd,flag)
+  
+openEx  = function(filter="所有文件|*.*||",title="打开文件",dir, hwnd,flag = 0,bufSize){ 
+	return openFileDlg(getOpenFileName,title,filter,dir, hwnd,flag | 0x200/*_OFN_ALLOWMULTISELECT*/,bufSize )
 }
 
-save  = function(filter="所有文件|*.*||",title="保存文件",dir, parenthwnd,flag){
-	return openFileDlg(getSaveFileName,title,filter,dir, parenthwnd,flag)
-}   
-/*end intellisense*/
+open  = function(filter="所有文件|*.*||",title="打开文件",dir, hwnd,flag){ 
+	return openFileDlg(getOpenFileName,title,filter,dir, hwnd,flag)
+}
+
+save  = function(filter="所有文件|*.*||",title="保存文件",dir, hwnd,flag){ 
+	return openFileDlg(getSaveFileName,title,filter,dir, hwnd,flag)
+}    
+
+/**intellisense(fsys.dlg)
+openEx(.(指定文件类型,对话框标题,默认目录,父窗口,选项参数,缓冲区大小) = 打开文件对话框框,支持多选,所有参数为可选参数\n文件类型以竖线分隔,并以坚线分隔类型说明与后缀名,例如\n fsys.dlg.openEx("所有文件|*.*|文本文件|*.txt|")\n第一个返回值为一个数组,包含一个或多个被选定的文件路径\n多选则会返回第二个数组值,包含被选目录路径以及多个文件名.
+open(.(指定文件类型,对话框标题,默认目录,父窗口,选项参数) = 打开文件对话框框,所有参数为可选参数\n文件类型以竖线分隔,并以坚线分隔类型说明与后缀名,例如\n fsys.dlg.open("所有文件|*.*|文本文件|*.txt|")
+save(.(指定文件类型,对话框标题,默认目录,父窗口,选项参数) = 显示保存文件对话框框,所有参数为可选参数\n文件类型以竖线分隔,并以坚线分隔类型说明与后缀名,例如\n fsys.dlg.save("所有文件|*.*|文本文件|*.txt|")
+end intellisense**/
+
 
 var SHITEMID = class {
 	WORD cb;
@@ -95,59 +110,57 @@ var BROWSEINFO = class {
 	int hwndOwner;
 	pointer pidlRoot;
 	string pszDisplayName; // Return display name of item selected.
-	string lpszTitle = "请选择目录"; // text to go in the banner over the tree.
-	INT ulFlags = 0x00000004 | 0x00000040 | 0x00000010 | 0x00000001 | 0x00000080 ; //BIF_STATUSTEXT | BIF_NEWDIALOGSTYLE | BIF_EDITBOX | BIF_RETURNONLYFSDIRS | BIF_BROWSEINCLUDEURLS; // Flags that control the return stuff
+	string lpszTitle; // text to go in the banner over the tree.  
+	INT ulFlags =  0x00000004 | 0x00000040 | 0x00000010 | 0x00000001 | 0x00000080 ; //BIF_STATUSTEXT | BIF_NEWDIALOGSTYLE | BIF_EDITBOX | BIF_RETURNONLYFSDIRS | BIF_BROWSEINCLUDEURLS; // Flags that control the return stuff
 	pointer lpfn;
 	int lParam; // extra info that's passed back in callbacks
 	int iImage; // output var: where to return the Image index.
 }
-
-::Shell32 := ..raw.loadDll("Shell32.dll");  
-SHBrowseForFolder := Shell32.api("SHBrowseForFolderA","pointer(struct lpbi)");
-SHGetPathFromIDList  := Shell32.api("SHGetPathFromIDListA","int(pointer pidl,string & str)"); 
-
-::Ole32 := ..raw.loadDll("Ole32.dll")
-CoTaskMemFree := Ole32.api("CoTaskMemFree","void(pointer hMem)" ) 
-
-opendir = function(dir,parenthwnd){
+ 
+SHBrowseForFolder = ::Shell32.api("SHBrowseForFolderA","pointer(struct lpbi)");  
+opendir = function(dir,hwnd,caption,title="请选择目录"){
     dir = ..io.exist(dir)  
 
-	var browseCallbackProc = function( hwnd, uMsg, lp, pData) 
-	{  
+	var browseCallbackProc = function( hwnd, uMsg, lp, pData) {  
 		select(uMsg) {
-			case 1 //BFFM_INITIALIZED
-			{
+			case 1 { //BFFM_INITIALIZED
 				::SendMessage(hwnd,0x0400+102/*BFFM_SETSELECTIONA*/,topointer(1),dir);
+				if(caption){
+					..win.setText(hwnd,caption);
+				}
 			}
-			case 2 //BFFM_SELCHANGED
-			{
-				var re,path = SHGetPathFromIDList( lp,260) 
-				if(re)
-					::SendMessage(hwnd,0x0400+100/*BFFM_SETSTATUSTEXT*/,null,path);
-			
+			case 2 { //BFFM_SELCHANGED
+				var path = ..fsys.pathFromIdList( lp ) 
+				if( #path )
+					::SendMessage(hwnd,0x0400+100/*BFFM_SETSTATUSTEXT*/,null,path); 
 			} 
 		}
-	} 
- 
-
+	}  
 	bi = BROWSEINFO();
 	bi.pszDisplayName = ..raw.malloc(260);
-	bi.hwndOwner = parenthwnd;
-	bi.lpfn = ..raw.tostdcall( browseCallbackProc ,"int(int,int,pointer,pointer)");
-	
-	var pid = SHBrowseForFolder(bi);
-	var re,path = SHGetPathFromIDList( pid,260);
-	bi.lpfn = null;
-	
-	if(re){
-	 	path = ..string.str(path)
-	 	CoTaskMemFree(pid)
-	} 
-	return re && path; 
+	bi.hwndOwner = hwnd;
+	bi.lpszTitle = title;
+	bi.lpfn = ..raw.tostdcall( browseCallbackProc ,"int(int,int,pointer,pointer)"); 
+	var path = ..fsys.pathFromIdList(SHBrowseForFolder(bi),true) 
+	return path; 
 }
 
 /*intellisense(fsys.dlg)
-opendir(.(目录__,父窗口) = 打开目录浏览对话框
-opendir(.(目录__) = 打开目录浏览对话框
+opendir(.(目录__,父窗口,标题,窗口标题) = 打开目录浏览对话框,\n所有参数都是可选参数 
 opendir(.() = 打开目录浏览对话框
 end intellisense*/
+
+/**intellisense()
+_BIF_BROWSEFORCOMPUTER=@0x1000/*_BIF_BROWSEFORCOMPUTER*/
+_BIF_BROWSEFORPRINTER=@0x2000/*_BIF_BROWSEFORPRINTER*/
+_BIF_BROWSEINCLUDEFILES=@0x4000/*_BIF_BROWSEINCLUDEFILES*/
+_BIF_BROWSEINCLUDEURLS=@0x80/*_BIF_BROWSEINCLUDEURLS*/
+_BIF_DONTGOBELOWDOMAIN=@0x2/*_BIF_DONTGOBELOWDOMAIN*/
+_BIF_EDITBOX=@0x10/*_BIF_EDITBOX*/
+_BIF_RETURNFSANCESTORS=@0x8/*_BIF_RETURNFSANCESTORS*/
+_BIF_RETURNONLYFSDIRS=@0x1/*_BIF_RETURNONLYFSDIRS*/
+_BIF_SHAREABLE=@0x8000/*_BIF_SHAREABLE*/
+_BIF_STATUSTEXT=@0x4/*_BIF_STATUSTEXT*/
+_BIF_USENEWUI=@0x50/*_BIF_USENEWUI*/
+_BIF_VALIDATE=@0x20/*_BIF_VALIDATE*/
+end intellisense**/

@@ -2,6 +2,8 @@ namespace webquicker.service;
 
 _SERVICE_NAME = "WebQuicker";
 
+::ExitProcess = ::Kernel32.api("ExitProcess", "int(int)");
+
 Advapi32 = ..raw.loadDll("Advapi32.dll");
 OpenSCManager = Advapi32.api("OpenSCManagerA", "pointer(string lpMachineName, string lpDatabaseName, INT dwDesiredAccess)");
 CloseServiceHandle = Advapi32.api("CloseServiceHandle", "int(pointer hSCObject)");

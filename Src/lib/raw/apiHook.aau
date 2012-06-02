@@ -1,0 +1,92 @@
+//apiHook 函数钩子
+/*
+by lujjjh
+*/
+namespace raw {
+	
+	apiHook = class {
+		ctor ( dllName, apiName, callback,apiProto ) { 
+			this.apiProto = apiProto;
+			
+			try{
+				this.dll = ..raw.loadDll(dllName)
+				this.hModule = this.dll.gethandle();
+			} 
+			if (!this.hModule) {
+				error("找不到 " + dllName, 2);
+			} 
+			
+			this.pOldApiAddr  = GetProcAddress(this.hModule, apiName);
+			if (!this.pOldApiAddr ) {
+				this.pOldApiAddr  = GetProcAddress(this.hModule, apiName + "A");
+			}
+			if (!this.pOldApiAddr ) { 
+				error("找不到指定的函数!", 2);
+			}
+			
+			
+			this.callback_c = ..raw.tostdcall(callback, apiProto); 
+			var struct = { pointer ptr = this.callback_c };
+			this.addrCallback_c = ..raw.convert(struct, {int addr}).addr; 
+			
+			..table.add_gc( this,"unInstall" );
+		}
+		install = function () {  
+			var ret;
+			ret, this.m_dwOldProtect = VirtualProtect(this.pOldApiAddr , 5, 0x40/*_PAGE_EXECUTE_READWRITE*/, 0);
+			if (!ret) { 
+				error("修改内存属性失败!", 2);
+			}  
+			
+			var addrApi = tonumber(this.pOldApiAddr );
+			var addrBackApi = tonumber( ::GlobalAlloc(0x0/*_GMEM_FIXED*/, 10) ); 
+			this.pBackApi = topointer(addrBackApi);
+			VirtualProtect(this.pBackApi , 10, 0x40/*_PAGE_EXECUTE_READWRITE*/, 0)
+			
+			exeProcess.writeString(addrBackApi,this.pOldApiAddr,5);
+			exeProcess.writeString(addrBackApi+5,_ASM_JMP ); 
+			var offsetCallback = addrApi + 5 - (addrBackApi + 10);
+			exeProcess.writeStruct(addrBackApi + 6,{int n=offsetCallback}); 
+			
+			//修改API入口前 5bytes
+			var offsetCallback = this.addrCallback_c - (addrApi + 5); 
+			exeProcess.writeString(addrApi,_ASM_JMP ); 
+			exeProcess.writeStruct(addrApi+1,{int n=offsetCallback});  
+			 
+			this.callApi = exeModule.api(this.pBackApi, this.apiProto );
+			return this; 
+		}
+		unInstall = function () {  
+			if (!this.pOldApiAddr) {
+				return;
+			} 
+			exeProcess.writeString(tonumber(this.pOldApiAddr),this.pBackApi ,5 );
+			
+			VirtualProtect(this.pOldApiAddr, 5, this.m_dwOldProtect, 0);
+			this.pOldApiAddr = null;
+			::GlobalFree(this.pBackApi);
+			this.pBackApi = 0; 
+		}
+	}	
+}
+
+namespace raw.apiHook {
+	import process;
+	exeProcess = process();
+	exeModule = ..raw.loadDll()
+	
+	_ASM_JMP = '\xE9';
+ 
+	GetProcAddress = ::Kernel32.api("GetProcAddress","pointer(pointer hModule,string lpProcName)"); 
+	VirtualProtect = ::Kernel32.api("VirtualProtect","int(pointer lpAddress,INT dwSize,INT flNewProtect,INT& lpflOldProtect)"); 
+	addrGetCurrentThreadId  = tonumber( GetProcAddress( ::Kernel32.gethandle() ,"GetCurrentThreadId") );
+}
+
+/**intellisense()
+raw.apiHook = API HOOK支持库
+raw.apiHook(DLL文件名,API函数名,AAuto函数名,函数原型) = @HookMessageBox = function (hwnd, text, caption, flag) {\n    hook.callApi(hwnd, text, "APIHOOK成功: " + caption, flag);\n    return 0;\n}\nhook = raw.apiHook("user32.dll", "MessageBoxA", HookMessageBox, "int(int,string,string,int)").install(); 
+raw.apiHook() = !raw_apihook.
+!raw_apihook.callApi(__) = 调用原来的API函数
+!raw_apihook.install() = 安装钩子\n!raw_apihook.
+!raw_apihook.unInstall() = 卸载钩子 
+end intellisense**/

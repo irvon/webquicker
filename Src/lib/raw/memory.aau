@@ -1,0 +1,38 @@
+//memory 内存操作
+//非精通底层指针操作，请勿使用以下API
+
+namespace raw.memory;
+
+VirtualAlloc = ::Kernel32.api("VirtualAlloc","pointer( pointer address,int size,int allocationType,int protect)")
+VirtualFree = ::Kernel32.api("VirtualFree","int( pointer address,int size,int freeType)")
+
+lstrlenW = ::Kernel32.api("lstrlenW","int(pointer lpStr)") //慎用
+lstrlen = ::Kernel32.api("lstrlenA","int(pointer lpStr)") //慎用
+
+lstrcatW = ::Kernel32.api("lstrcatW","pointer(pointer lpStrOut,pointer lpStrIn)") //慎用
+lstrcat = ::Kernel32.api("lstrcatA","pointer(pointer lpStrOut,pointer lpStrIn)") //慎用
+
+lstrcpyW = ::Kernel32.api("lstrcpyW","pointer(pointer lpStrOut,pointer lpStrIn)") //慎用
+lstrcpy = ::Kernel32.api("lstrcpyA","pointer(pointer lpStrOut,pointer lpStrIn)") //慎用
+
+lstrcpynW = ::Kernel32.api("lstrcpynW","pointer(pointer lpStrOut,pointer lpStrIn,int iMaxLength)") //慎用
+lstrcpyn = ::Kernel32.api("lstrcpynA","pointer(pointer lpStrOut,pointer lpStrIn,int iMaxLength)") //慎用
+
+lstrcmpW = ::Kernel32.api("lstrcmpW","int(pointer lpStr1,pointer lpStr2)") //慎用
+lstrcmp = ::Kernel32.api("lstrcmpA","int(pointer lpStr1,pointer lpStr2)") //慎用
+
+lstrcmpiW = ::Kernel32.api("lstrcmpiW","int(pointer lpStr1,pointer lpStr2)") //慎用
+lstrcmpi = ::Kernel32.api("lstrcmpiA","int(pointer lpStr1,pointer lpStr2)") //慎用
+	
+/*intellisense(raw.memory)*/
+alloc = function(size,allocationType=0x1000/*_MEM_COMMIT*/,protect=0x4/*_PAGE_READWRITE*/,address){
+	return VirtualAlloc(address, size,allocationType,protect)
+}
+
+free = function(buffer,freeType=0x8000/*_MEM_RELEASE*/,size=0){
+	VirtualFree( buffer,freeType,size);
+}
+/*end intellisense*/
+ 
+
+

@@ -1,0 +1,64 @@
+//interface 静态接口
+namespace raw;
+	
+::Exe := ..raw.loadDll();
+                           
+var interface_c = class{
+　　pointer vtbl; 
+} 
+class interface{
+	ctor( objptr,struct,cal="stdcall" ){   
+		if( !objptr )
+			error("无效的接口指针",2);
+			
+		var it = interface_c();
+		var vtbl = struct();
+		var tproto = struct();   
+		..raw.convert( objptr,it ); 
+		..raw.convert( it.vtbl,vtbl); 
+		
+		checkReturn = function(k,ok,ret,...){
+			if(ok || (ret===null) )
+				return ret,...;
+			
+			//修正错误信息 	 
+			var err = ..string.replace(
+				ret,
+				"\@(\d)",
+				function(c){
+					c--;
+					return "@" +c; 
+				}
+			) 
+			err = ..string.replace(err,"'\?'",k);
+			error(err,3)
+		}
+		 
+		var p;
+		for( k,addr in vtbl){
+			if( type(addr) != type.pointer )
+				continue;
+		 
+		    //Add 'POINTER this'
+		    p = tproto[k]
+		    if( type(p)!=type.string){
+		    	continue;
+		    } 
+		    p,c = ..string.replace(p,"@(","(POINTER this,"); 
+		    if(c !== 1)
+		    	continue;
+		    
+		    //Create API 	
+			var api = Exe.api(addr,p,cal) ; 
+			this[k] = function(...){ 
+				return checkReturn( k,call( api, ,objptr,...) ) 
+			}  
+		}  
+	}
+	@{_topointer = objptr}
+}
+
+/**intellisense()
+raw.interface = 用于将指针转换为类C++接口定义
+raw.interface() = @interface_c = raw.interface(\n	指针,\n	class {\n		pointer func = "int()";\n	} \n)
+end intellisense**/

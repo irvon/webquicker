@@ -1,0 +1,89 @@
+//util 语言扩展
+namespace util;
+ 
+apply = function(f,o,a,l=2){ 
+	return invoke(f,o,..table.unpack(a,..table.range(a) ) );  
+}
+
+bind = function(f,...){
+	if( type(f)!=type.function)
+		error("参数1须是函数对象",2)
+		
+	var d = {...} 
+	var d1,d2 = ..table.range(d)
+	return function(...){
+		var a ={...}
+		var aBegin = 1;
+		for(i=d1;d2 ){ 
+			if(d[i]===null)
+				break;
+			..table.insert(a,d[i],i);
+			aBegin=i;
+		}
+		for(i=aBegin+1;d2){  
+			if( (d[i]!==null) && (a[i]===null) ){
+				a[i] = d[i] 
+			} 
+		}
+		return apply( f,owner,a,3) ; 
+	}
+}
+
+hitch = function(o,f,...){
+	if(type(f)==type.string)
+		f = o[f]
+	
+	if(type(f)!=type.function)
+		error("参数2指定了无效的函数",2)
+			
+	var r = function(...){
+		return apply(f,o,{...} );
+	} 
+	return ...? bind(r,...) : r
+}
+
+connect = function(o,m,h,hm){
+	o := global;
+	var name = type(m)==type.string ? m;
+	if( name ){
+		m = o[[name]]
+	} 
+	if(hm){
+		if( type(hm)==type.string )
+			hm = h[hm]
+	}
+	else { 
+		hm = h;
+		h = o;
+	} 
+	
+	var f;
+	if( m && hm ){ 
+		f = function(...){ 
+			var ret = apply( hm,h,{...} ) 
+			if(ret!==null)
+				return ret;
+				
+			return apply( m,o,{...} ); 
+		}  
+	}
+	else {
+		f = m : hm
+	}
+	
+	if( name ) o[name] = f;
+	return f;
+} 
+
+
+/**intellisense(util)
+apply(.(函数,owner,参数表) = 用法类似call\n调用函数并显示指定owner参数\n参数三为参数表(table数组)\n该函数在遇到错误时抛出异常
+connect(.(目标对象,成员函数,钩子函数) = 创建并返回一个函数对象,\n在调用目标函数之前调用钩子函数\n钩子函数无返回值则调用目标函数返回值\n如果目标函数或钩子函数为空,返回非空函数 .\n\n参数一省略则默认为global对象
+connect(.(目标对象,成员函数名,钩子函数) = 创建并返回一个函数对象,\n在调用目标函数之前调用钩子函数\n\n如果参数二为字符串,则直接更新原函数
+connect(.(目标对象,成员函数名,钩子对象,钩子函数名) = 创建并返回一个函数对象象,\n在调用目标函数之前调用钩子函数\n目标对象绑定为成员函数的owner参数,\n钩子对象绑定为钩子函数的owner参数
+bind(.(目标函数,不定参数) = 该函数生成一个函数对象以调用目标函数\n可按目标函数形参顺序指定任意个默认实参值\n第一个出现的null参数对应返回函数的第一个调用实参
+hitch(.(owner对象,函数对象) = 为函数绑定owner对象\n可选在后面绑定任意个默认实参\n第一个出现的null参数对应返回函数的第一个调用实参
+hitch(.(owner对象,函数方法名) = 为函数绑定owner对象\n可选在后面绑定任意个默认实参\n第一个出现的null参数对应返回函数的第一个调用实参
+end intellisense**/
+
+ 

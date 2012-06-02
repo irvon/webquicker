@@ -1,0 +1,46 @@
+/* 栏目操作 */
+
+load_class("db.class", "catalog.function");
+
+// 获取栏目列表（替换 {nav_list}）
+get_nav_list = function (selected = "index") {
+	var nav_list = string.format(
+		'<ul id="nav">\r\n\t\t<li%s><a href="%s/index.aau">%s</a></li>\r\n',
+		selected == "index" ? ' class="selected"' : "",
+		string.fromto(_baseurl, 0, 65001), string.fromto("首页", 0, 65001)
+	);
+	// 连接数据库，读取分类列表
+	var db = class_db();
+	db.connect();
+	var catalogs = get_catalog_list();
+	for (i = 1; #catalogs) {
+		nav_list += string.format(
+			'\t\t<li%s><a href="%s/catalog.aau?id=%d">%s</a></li>\r\n',
+			catalogs[i]["catalog_id"] == selected ? ' class="selected"' : "",
+			_baseurl,
+			catalogs[i]["catalog_id"],
+			catalogs[i]["catalog_name"]
+		);
+	}
+	db.close();
+	nav_list += '\t</ul>';
+	return nav_list;
+}
+
+// 栏目是否存在
+is_catalog_exist = function (id) {
+	if (!id) {
+		return false;
+	}
+	var ret, catalog = false;
+	id = tonumber(id);
+	var db = class_db();
+	db.connect();
+	var data = db.conn.getTable("SELECT catalog_id,catalog_name FROM catalog WHERE catalog_id=" + id);
+	if (#data) {
+		ret = true;
+		catalog = { name = data[1]["catalog_name"]; };
+	}
+	db.close();
+	return ret, catalog;
+}

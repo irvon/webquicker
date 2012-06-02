@@ -1,11 +1,4 @@
-//XXTEA 对称加密算法
-/* xxtea encryption arithmetic library. 
-* Copyright (C) 2010 Ecranesoft Lab<web@ecranesoft.com>
-* Version:      1.0
-* LastModified: Apr 23, 2010
-* This library is free.  You can redistribute it and/or modify it. 
-*/
- 
+//xxtea 加密
 namespace string.xxtea 
 
 //频繁使用的外部函数存为本地函数，减少名字空间查询次数。

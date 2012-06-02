@@ -1,5 +1,7 @@
 import fsys;
 
+_SCRIPT_START_TIME = time.tick();
+
 var aau_path = ...;
 
 include = function (path, ...) {
@@ -9,6 +11,8 @@ include = function (path, ...) {
 		// Ïà¶ÔÂ·¾¶
 		path = fsys.joinpath(io.splitpath(aau_path).dir, path);
 	}
+	path = string.replace(path, "\\", "/");
+	path = string.replace(path, "/+", "/");
 	var func, err = loadcode(path);
 	if (!func) {
 		response.write(err);
@@ -26,4 +30,17 @@ sprintf = string.format;
 
 printf = function (...) {
 	print(sprintf(...));
+}
+
+dirname = function (...) {
+	return io.splitpath(...).dir;
+}
+
+die = function (...) {
+	print(...);
+	response.close();
+}
+
+exit = function (msg) {
+	die(msg or "");
 }

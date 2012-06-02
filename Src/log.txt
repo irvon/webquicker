@@ -1,3 +1,23 @@
+2011-7-6 0.1c
+1. 每人有自己的设置，因此删除了 config 文件夹；如需配置，请自行建立 config 文件夹，并且建立 config.ini 文件进行配置
+
+2011-6-19 0.1c
+1. 解决全局变量的释放导致的一些问题
+2. 修正 mysql 库内存泄漏问题
+3. dir 函数改名为 dirname
+
+2011-6-18 0.1c
+1. 解决 response.close 遗留问题
+2. 添加 dir, die, exit 等 php-like function
+3. 自动处理 owner 路径，将所有路径格式改为： X:/folder/
+4. 添加 _SCRIPT_START_TIME 常量，表示脚本开始执行的时候，操作系统启动的毫秒数，脚本中可用 time.tick() - _SCRIPT_START_TIME 获取脚本执行的时间
+5. 修正当收到数据中不存在连续回车时死循环的问题（如数据发送到一半突然停止访问）
+6. 自动释放脚本中声明的变量，如 mysql 类，无需手动关闭数据库
+7. 修改 exit 函数细节
+
+2011-6-17 0.1c
+1. 发送的附加数据（POST Body）支持无限大小（理论，尚需测试）
+
 2011-6-16 0.1c
 1. 加入 config/config.ini 文件，以配置 WebQuicker 运行参数
 

@@ -55,12 +55,12 @@ class file{
 			} 
 		)
 	}; 
-	@metaProperty
+	@_metaProperty
 }
  
 var push = ..table.push;
 namespace file{	
-	metaProperty = ..util.metaProperty(
+	_metaProperty = ..util.metaProperty(
 		close = function(){
 			if(owner.hfile)
 				..raw.closehandle(owner.hfile)
