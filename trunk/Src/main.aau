@@ -258,7 +258,7 @@ accept = function (hSocket, settings) {
 						t.addhour(-8); // GMT +0:00
 						response.header["Last-Modified"] = tostring(t);
 						// ·¢ËÍ»Ø¸´Í·
-						var bytesTotal = file.size();
+						var bytesTotal = file.seek("end");
 						var responseHeader = response.makeResponseHeader(bytesTotal);
 						wsock.send(hSocket, responseHeader, #responseHeader, 0);
 						file.seek("set");
