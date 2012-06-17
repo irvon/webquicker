@@ -3,7 +3,7 @@
 load_class("db.class");
 
 format_entry = function (temp, entry) {
-	var entry_t = table.copy(entry);
+	var entry_t = table.clone(entry);
 	entry_t["entry_date"] = time(tonumber(entry_t["entry_date"]));
 	entry_t["entry_date"].format = "%Y-%m-%d %H:%M:%S";
 	var re, info = is_catalog_exist(tonumber(entry_t["entry_catalog"]));
